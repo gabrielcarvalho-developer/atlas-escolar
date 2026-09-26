@@ -1,0 +1,46 @@
+{
+  "project": "ATLAS Escolar — Maranhão",
+  "version": "1.0",
+  "documentationDate": "2026-09-12",
+  "generatedFrom": "data/incoming",
+  "datasets": {
+    "enem_censo_indicadores_infraestrutura_2025.csv": {
+      "sha256": "90f5cee972fb2cbedce139477bc727fa88dfc076ff8a94b2a721bf6795968daf",
+      "rows": 711,
+      "columns": 60,
+      "source": "ENEM 2025 + Censo Escolar 2025",
+      "purpose": "Dashboard individual por escola"
+    },
+    "censo_municipios_ma_2025.csv": {
+      "sha256": "29263e807d11bd380dc9ed1479dc3be255eef1e9356cbb08c2e6bf608ccc4658",
+      "rows": 217,
+      "columns": 41,
+      "source": "Censo Escolar 2025",
+      "purpose": "Dashboard municipal somente Censo"
+    },
+    "censo_enem_municipios_ma_2025.csv": {
+      "sha256": "ccd39479fa2dff341e205b5cf23e6ea02130271b13d87db2a85640ace4d2fd36",
+      "rows": 217,
+      "columns": 71,
+      "source": "Censo Escolar 2025 + ENEM 2025",
+      "purpose": "Dashboard municipal Censo + ENEM"
+    },
+    "saeb_contexto_estadual_ma_2023.csv": {
+      "sha256": "fda5cfca27878b9045c234b83a0f0343d4045a08a3c81b6a2d52d85e05986bf5",
+      "rows": 30,
+      "columns": 22,
+      "source": "SAEB 2023",
+      "purpose": "Contexto estadual do Maranhão"
+    }
+  },
+  "acceptance": {
+    "publicSchools": 10080,
+    "municipalities": 217,
+    "highSchools": 925,
+    "enemSchools": 821,
+    "linkedSchools": 711,
+    "unlinkedSchools": 110,
+    "enemRecords": 60992,
+    "saebRows": 30
+  }
+}

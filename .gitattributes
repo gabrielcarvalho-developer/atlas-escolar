@@ -1,0 +1,5 @@
+# The source CSV contract uses UTF-8 BOM and CRLF. Keep checkout bytes stable so
+# their SHA-256 hashes match on Windows, Linux and CI/CD environments like Vercel.
+*.csv text eol=crlf
+*.json text eol=lf
+*.mjs text eol=lf
