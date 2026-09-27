@@ -35,6 +35,12 @@ Copie `python/.env.example` para `python/.env.local`, escolha `LLM_PROVIDER` e p
 
 As credenciais do modelo ficam somente na API Python e nunca são enviadas ao navegador. Sem a configuração válida do agente, a interface falha explicitamente e não troca silenciosamente de motor.
 
+### Base institucional da equipe
+
+Perguntas sobre quem desenvolveu o Atlas, integrantes, orientadores e responsabilidades usam um RAG local antes do fluxo analítico. A fonte editável fica em `python/knowledge/equipe_atlas.md`: cada seção `##` é tratada como um trecho recuperável, e somente os trechos relacionados à pergunta são enviados ao modelo. Para este corpus pequeno, a busca lexical normalizada evita a infraestrutura e o custo de um banco vetorial sem sacrificar a precisão dos nomes e funções.
+
+Opcionalmente, `ATLAS_PROJECT_KNOWLEDGE_PATH` pode apontar para outro arquivo Markdown no mesmo formato. Respostas desse fluxo são identificadas na interface pela fonte “Equipe do ATLAS Escolar”.
+
 ## Executar localmente
 
 ```bash

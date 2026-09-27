@@ -12,6 +12,7 @@ import {
   RotateCcw,
   SendHorizontal,
   UserRound,
+  Users,
 } from 'lucide-react';
 import { AtlasShell } from '@/components/atlas-shell';
 import { useAtlas } from '@/components/atlas-provider';
@@ -76,6 +77,11 @@ function buildSuggestions(context: SchoolContext) {
       label: 'Recursos ausentes',
       question: 'Quais recursos não estão registrados nesta escola?',
       icon: LaptopMinimal,
+    },
+    {
+      label: 'Quem desenvolveu o Atlas?',
+      question: 'Quem desenvolveu você?',
+      icon: Users,
     },
   ];
 }

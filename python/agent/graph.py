@@ -14,9 +14,11 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from langgraph.graph import END, StateGraph
 
 from agent.mcp_client import REQUIRED_TOOLS, MCPToolError, create_mcp_client, decode_tool_result
+from agent.project_knowledge import format_knowledge_context, retrieve_project_knowledge
 from agent.prompts import (
     ANSWER_FORMAT_INSTRUCTIONS,
     PLANNER_SYSTEM_PROMPT,
+    PROJECT_KNOWLEDGE_SYSTEM_PROMPT,
     REFLECTOR_SYSTEM_PROMPT,
 )
 from agent.state import AgentState, PlanStep, ToolCall
@@ -202,6 +204,43 @@ def _conversational_answer(question: str) -> str | None:
             "principais pontos de atenção desta escola?”"
         )
     return None
+
+
+async def _project_knowledge_answer(
+    question: str, history: list[dict[str, str]] | None = None
+) -> str | None:
+    """Recupera contexto institucional e pede ao modelo uma resposta fundamentada."""
+    chunks = retrieve_project_knowledge(question, history)
+    if not chunks:
+        return None
+
+    recent_history = ""
+    if history:
+        recent_messages = history[-4:]
+        recent_history = "\n".join(
+            f"{message.get('role', 'user')}: {str(message.get('content', ''))[:1000]}"
+            for message in recent_messages
+        )
+
+    user_parts = []
+    if recent_history:
+        user_parts.append(f"Histórico recente para resolver referências:\n{recent_history}")
+    user_parts.extend(
+        [
+            f"Pergunta atual: {question}",
+            f"Base institucional recuperada:\n{format_knowledge_context(chunks)}",
+        ]
+    )
+    response = await _get_llm().ainvoke(
+        [
+            SystemMessage(content=PROJECT_KNOWLEDGE_SYSTEM_PROMPT),
+            HumanMessage(content="\n\n".join(user_parts)),
+        ]
+    )
+    answer = _collapse_repeated_blocks(_message_text(response.content))
+    if not answer:
+        raise RuntimeError("O modelo retornou uma resposta institucional vazia.")
+    return answer
 
 
 def _asks_for_missing_resources(question: str) -> bool:
@@ -748,6 +787,26 @@ async def run_agent(
             "evidence_count": 0,
             "engine": "atlas-conversation",
             "mode": "Conversa com o Atlas",
+        }
+
+    try:
+        knowledge_answer = await _project_knowledge_answer(question, history)
+    except Exception as exc:
+        logger.exception("Project knowledge retrieval failed")
+        return {
+            "answer": "Não consegui consultar as informações da equipe agora. Tente novamente em instantes.",
+            "error": str(exc),
+            "engine": "project-knowledge-error",
+            "mode": "Base institucional indisponível",
+        }
+    if knowledge_answer is not None:
+        return {
+            "answer": knowledge_answer,
+            "iterations": 1,
+            "evidence_count": 1,
+            "engine": "project-knowledge-rag",
+            "mode": "Informações sobre a equipe",
+            "source": "Equipe do ATLAS Escolar",
         }
 
     app = build_agent_graph()

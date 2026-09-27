@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from mcp import Client
 
+from agent import graph as agent_graph
 from agent.graph import (
     _collapse_repeated_blocks,
     _conversational_answer,
@@ -12,6 +13,10 @@ from agent.graph import (
     _parse_json_response,
 )
 from agent.mcp_client import REQUIRED_TOOLS, create_mcp_client, decode_tool_result
+from agent.project_knowledge import (
+    project_knowledge_query,
+    retrieve_project_knowledge,
+)
 from agent.state import AgentState, PlanStep, ToolCall
 from api import _answer_chunks, _sse_event
 from mcp_server import mcp
@@ -62,6 +67,65 @@ def test_common_social_messages_have_direct_responses() -> None:
     assert _conversational_answer("Quem é você?") is not None
     assert _conversational_answer("O que você pode fazer?") is not None
     assert _conversational_answer("Até mais") is not None
+
+
+def test_team_question_retrieves_the_complete_project_corpus() -> None:
+    chunks = retrieve_project_knowledge("Quem desenvolveu você?")
+
+    titles = {chunk.title for chunk in chunks}
+    assert "Professores orientadores" in titles
+    assert "Estudantes" in titles
+    assert "Equipe de IA e Dados" in titles
+    assert "Equipe de Desenvolvimento do Sistema" in titles
+
+
+def test_team_member_question_prioritizes_relevant_responsibilities() -> None:
+    chunks = retrieve_project_knowledge("Qual é a função de Luciely no projeto?")
+
+    assert chunks
+    assert any(chunk.title == "Equipe de Desenvolvimento do Sistema" for chunk in chunks)
+    assert any("Luciely Beatriz" in chunk.content for chunk in chunks)
+
+
+def test_orientation_question_is_recognized_without_naming_atlas() -> None:
+    chunks = retrieve_project_knowledge("Quem são os professores orientadores?")
+
+    assert chunks[0].title == "Professores orientadores"
+
+
+def test_unrelated_data_question_does_not_use_project_knowledge() -> None:
+    chunks = retrieve_project_knowledge("Compare a média do ENEM desta escola com o município.")
+
+    assert chunks == []
+
+
+def test_short_follow_up_uses_the_previous_team_question() -> None:
+    history = [{"role": "user", "content": "Quem é o professor Erick?"}]
+
+    query = project_knowledge_query("E do que ele gosta?", history)
+    chunks = retrieve_project_knowledge("E do que ele gosta?", history)
+
+    assert query is not None
+    assert chunks[0].title == "Professores orientadores"
+
+
+async def test_team_rag_returns_grounded_metadata_without_running_mcp(monkeypatch) -> None:
+    class FakeResponse:
+        content = "O ATLAS Escolar foi desenvolvido coletivamente pela equipe do projeto."
+
+    class FakeLlm:
+        async def ainvoke(self, messages):
+            assert "Marcelo Augusto" in messages[-1].content
+            assert "Erick MacGregor" in messages[-1].content
+            return FakeResponse()
+
+    monkeypatch.setattr(agent_graph, "_get_llm", lambda: FakeLlm())
+
+    result = await agent_graph.run_agent("Quem desenvolveu você?")
+
+    assert result["engine"] == "project-knowledge-rag"
+    assert result["source"] == "Equipe do ATLAS Escolar"
+    assert result["evidence_count"] == 1
 
 
 async def test_mcp_tool_returns_real_school_data() -> None:

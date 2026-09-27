@@ -53,6 +53,7 @@ class AgentResponse(BaseModel):
     evidence_count: int = 0
     engine: str = "mcp-langgraph"
     mode: str = "Agente Atlas via MCP"
+    source: str | None = None
     error: str | None = None
 
 
@@ -127,8 +128,8 @@ async def _stream_agent_response(
     yield _sse_event(
         "done",
         {
-            "source": "Atlas Escolar",
-            "mode": "Consulta aos dados do Atlas",
+            "source": result.get("source", "Atlas Escolar"),
+            "mode": result.get("mode", "Consulta aos dados do Atlas"),
             "engine": result.get("engine", "mcp-langgraph"),
             "iterations": result.get("iterations", 0),
             "evidenceCount": result.get("evidence_count", 0),
