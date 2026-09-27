@@ -608,16 +608,20 @@ export default function OverviewPage() {
   const math = context.performanceAreas.find((area) => area.key === 'mt')!;
   const schoolResources = [
     ['Água potável', context.school.resources.water],
+    ['Biblioteca', context.school.resources.library || context.school.resources.readingRoom],
+    ['Coleta de lixo', context.school.resources.wasteCollection],
     ['Energia pública', context.school.resources.publicEnergy],
     ['Esgoto público', context.school.resources.publicSewage],
-    ['Coleta de lixo', context.school.resources.wasteCollection],
-    ['Biblioteca', context.school.resources.library || context.school.resources.readingRoom],
+    ['Internet', context.school.resources.internet],
+    ['Internet para alunos', context.school.resources.studentInternet],
     ['Lab. de ciências', context.school.resources.scienceLab],
     ['Lab. de informática', context.school.resources.computerLab],
     ['Quadra esportiva', context.school.resources.sportsCourt],
-    ['Internet', context.school.resources.internet],
-    ['Internet para alunos', context.school.resources.studentInternet],
   ] as const;
+  const orderedInfrastructureKeys = [...INFRA_KEYS].sort(
+    (left, right) =>
+      context.school.infrastructure[right] - context.school.infrastructure[left],
+  );
 
   return (
     <AtlasShell>
@@ -741,18 +745,6 @@ export default function OverviewPage() {
                 </div>
               ))}
             </div>
-            <div className="mt-5 grid grid-cols-3 gap-2">
-              {[
-                ['Desktops', context.school.resources.desktops],
-                ['Portáteis', context.school.resources.laptops],
-                ['Tablets', context.school.resources.tablets],
-              ].map(([label, value]) => (
-                <div key={String(label)} className="rounded-xl border border-[var(--line)] p-3">
-                  <p className="text-[10px] text-[var(--muted)]">{label}</p>
-                  <p className="mt-2 text-xl font-bold">{formatNumber(Number(value))}</p>
-                </div>
-              ))}
-            </div>
           </article>
 
           <article className="atlas-card p-5 sm:p-6">
@@ -762,7 +754,7 @@ export default function OverviewPage() {
               description="Situação da escola em cada dimensão avaliada."
             />
             <div className="mt-6 space-y-5">
-              {INFRA_KEYS.map((key) => {
+              {orderedInfrastructureKeys.map((key) => {
                 const value = context.school.infrastructure[key] * 10;
                 const status = statusFor(context.school.infrastructure[key]);
                 return (
