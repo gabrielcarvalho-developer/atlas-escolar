@@ -141,7 +141,13 @@ function waitForTypingFrame() {
   );
 }
 
-function RichText({ text, typing = false }: { text: string; typing?: boolean }) {
+function RichText({
+  text,
+  typing = false,
+}: {
+  text: string;
+  typing?: boolean;
+}) {
   const paragraphs = text.split('\n\n');
 
   return (
@@ -150,7 +156,7 @@ function RichText({ text, typing = false }: { text: string; typing?: boolean }) 
         <p key={index} className="whitespace-pre-line">
           {paragraph.split(/(\*\*.*?\*\*)/g).map((part, partIndex) =>
             part.startsWith('**') && part.endsWith('**') ? (
-              <strong key={partIndex} className="font-bold text-[var(--ink)]">
+              <strong key={partIndex} className="font-bold text-[inherit]">
                 {part.slice(2, -2)}
               </strong>
             ) : (
@@ -163,6 +169,21 @@ function RichText({ text, typing = false }: { text: string; typing?: boolean }) 
         </p>
       ))}
     </div>
+  );
+}
+
+function ThinkingIndicator({ status }: { status: string }) {
+  return (
+    <output
+      className="atlas-thinking-dots"
+      aria-live="polite"
+      aria-label={status}
+    >
+      <span aria-hidden="true" />
+      <span aria-hidden="true" />
+      <span aria-hidden="true" />
+      <span className="sr-only">{status}</span>
+    </output>
   );
 }
 
@@ -351,7 +372,9 @@ export default function AssistantPage() {
           : STREAM_CHARACTERS_PER_FRAME;
         for (let index = 0; index < incomingCharacters.length; index += step) {
           if (controller.signal.aborted) return;
-          receivedText += incomingCharacters.slice(index, index + step).join('');
+          receivedText += incomingCharacters
+            .slice(index, index + step)
+            .join('');
           setMessages((current) =>
             current.map((message) =>
               message.id === assistantId
@@ -460,7 +483,7 @@ export default function AssistantPage() {
               className="soft-scroll min-h-0 flex-1 overflow-y-auto px-3 py-6 sm:px-6 sm:py-8"
               aria-live="polite"
             >
-              <div className="mx-auto flex w-full max-w-[900px] flex-col gap-7">
+              <div className="mx-auto flex w-full max-w-[900px] flex-col gap-6 sm:gap-7">
                 {messages.map((message) => (
                   <article
                     key={message.id}
@@ -469,10 +492,10 @@ export default function AssistantPage() {
                         ? 'Mensagem enviada por você'
                         : 'Resposta do Assistente Atlas'
                     }
-                    className={`flex w-full items-start gap-2.5 sm:gap-3 ${message.role === 'user' ? 'justify-end' : ''}`}
+                    className={`atlas-chat-message flex w-full items-start gap-2.5 sm:gap-3 ${message.role === 'user' ? 'justify-end' : ''}`}
                   >
                     {message.role === 'assistant' && (
-                      <div className="grid size-9 shrink-0 place-items-center rounded-full bg-[var(--teal-soft)] text-[var(--teal)] sm:size-10">
+                      <div className="grid size-9 shrink-0 place-items-center rounded-full border border-[color-mix(in_srgb,var(--teal)_18%,transparent)] bg-[var(--teal-soft)] text-[var(--teal)] shadow-[0_4px_12px_rgb(18_47_56/8%)] sm:size-10">
                         <Bot size={17} />
                       </div>
                     )}
@@ -492,11 +515,8 @@ export default function AssistantPage() {
                         </span>
                       </div>
                       <div
-                        className={`min-w-0 max-w-full rounded-[18px] px-4 py-3.5 sm:px-5 sm:py-4 ${
-                          message.role === 'user'
-                            ? 'rounded-tr-md bg-[var(--teal-soft)]'
-                            : 'rounded-tl-md bg-[var(--surface-soft)]'
-                        }`}
+                        data-role={message.role}
+                        className="atlas-chat-bubble min-w-0 max-w-full px-4 py-3.5 sm:px-5 sm:py-4"
                       >
                         <RichText
                           text={message.text}
@@ -522,22 +542,32 @@ export default function AssistantPage() {
                       )}
                     </div>
                     {message.role === 'user' && (
-                      <div className="grid size-9 shrink-0 place-items-center rounded-full border border-[var(--primary-foreground)] bg-[var(--navy)] text-[var(--primary-foreground)] sm:size-10">
+                      <div className="grid size-9 shrink-0 place-items-center rounded-full border border-[color-mix(in_srgb,var(--navy)_78%,white)] bg-[var(--navy)] text-[var(--primary-foreground)] shadow-[0_4px_12px_rgb(18_47_56/10%)] sm:size-10">
                         <UserRound size={17} />
                       </div>
                     )}
                   </article>
                 ))}
                 {loading && !streamingMessageId && (
-                  <div className="flex items-center gap-3 text-xs text-[var(--muted)]">
-                    <div className="grid size-9 shrink-0 place-items-center rounded-full bg-[var(--teal-soft)] text-[var(--teal)] sm:size-10">
-                      <Database size={16} />
+                  <div className="atlas-chat-message flex items-start gap-2.5 sm:gap-3">
+                    <div className="grid size-9 shrink-0 place-items-center rounded-full border border-[color-mix(in_srgb,var(--teal)_18%,transparent)] bg-[var(--teal-soft)] text-[var(--teal)] shadow-[0_4px_12px_rgb(18_47_56/8%)] sm:size-10">
+                      <Bot size={17} />
                     </div>
-                    <div>
-                      <p className="mb-1 text-xs font-extrabold text-[var(--ink)]">
-                        Atlas
-                      </p>
-                      <span className="animate-pulse">{statusMessage}</span>
+                    <div className="flex min-w-0 flex-col items-start">
+                      <div className="mb-1.5 flex min-w-0 items-baseline gap-2 px-1">
+                        <span className="text-xs font-extrabold text-[var(--ink)]">
+                          Atlas
+                        </span>
+                        <span className="truncate text-[11px] text-[var(--muted)]">
+                          pensando
+                        </span>
+                      </div>
+                      <div
+                        data-role="assistant"
+                        className="atlas-chat-bubble px-4 py-3.5"
+                      >
+                        <ThinkingIndicator status={statusMessage} />
+                      </div>
                     </div>
                   </div>
                 )}
