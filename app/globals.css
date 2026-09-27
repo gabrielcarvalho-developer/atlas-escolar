@@ -537,6 +537,31 @@ textarea,
   color: var(--teal);
 }
 
+.atlas-answer-chart-scroll {
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 0.5rem;
+  overscroll-behavior-inline: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+.atlas-answer-chart-scroll > [data-slot='chart'] {
+  width: max(100%, 34rem);
+  max-width: none;
+}
+
+.atlas-answer-chart [data-slot='chart'] .recharts-surface:focus,
+.atlas-answer-chart [data-slot='chart'] .recharts-surface:focus-visible {
+  outline: none;
+}
+
+@media (min-width: 640px) {
+  .atlas-answer-chart-scroll {
+    padding: 0.75rem;
+  }
+}
+
 @keyframes atlas-thinking-dot {
   0%,
   60%,

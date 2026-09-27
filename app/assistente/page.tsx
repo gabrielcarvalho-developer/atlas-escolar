@@ -124,13 +124,18 @@ function waitForTypingFrame() {
 
 const SOURCE_FOOTER_PATTERN =
   /(?:^|\n)\s*(?:[-*+•]\s*)?(?:\*\*)?Fonte:(?:\*\*)?\s*(?:Fonte:\s*)?([^\n]+)\s*$/i;
+const SOURCE_LABEL_PATTERN =
+  /(?:^|\n)\s*(?:#{1,3}\s+)?(?:\*\*)?Fonte(?:\*\*)?\s*:?[ \t]*$/i;
 
 function sourceFromAnswer(text: string) {
   return text.match(SOURCE_FOOTER_PATTERN)?.[1]?.replace(/\*\*$/, '').trim();
 }
 
 function answerWithoutSource(text: string) {
-  return text.replace(SOURCE_FOOTER_PATTERN, '').trimEnd();
+  return text
+    .replace(SOURCE_FOOTER_PATTERN, '')
+    .replace(SOURCE_LABEL_PATTERN, '')
+    .trimEnd();
 }
 
 function RichText({
@@ -799,7 +804,7 @@ export default function AssistantPage() {
                                 ? 'Indicadores de infraestrutura'
                                 : 'Desempenho por área'}
                             </figcaption>
-                            <div className="min-w-0 p-2 sm:p-3">
+                            <div className="atlas-answer-chart-scroll soft-scroll">
                               <MessageVisualization
                                 visualization={message.visualization}
                                 year={atlas.year}
