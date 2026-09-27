@@ -24,6 +24,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import {
+  readAssistantStream,
   type AssistantAnswer,
   type AssistantConversationTurn,
   type AssistantVisualization,
@@ -117,6 +118,13 @@ function loadStoredMessages() {
   }
 }
 
+function waitForStreamFrame() {
+  const delay = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    ? 0
+    : 45;
+  return new Promise<void>((resolve) => window.setTimeout(resolve, delay));
+}
+
 function RichText({ text }: { text: string }) {
   return (
     <div className="space-y-3 text-sm leading-7">
@@ -183,6 +191,10 @@ export default function AssistantPage() {
   const [storageReady, setStorageReady] = useState(false);
   const [draft, setDraft] = useState('');
   const [loading, setLoading] = useState(false);
+  const [streamingMessageId, setStreamingMessageId] = useState<string>();
+  const [statusMessage, setStatusMessage] = useState(
+    'Analisando sua pergunta…',
+  );
   const bottomRef = useRef<HTMLDivElement>(null);
   const activeRequest = useRef<AbortController | null>(null);
 
@@ -196,14 +208,14 @@ export default function AssistantPage() {
   }, []);
 
   useEffect(() => {
-    if (!storageReady) return;
+    if (!storageReady || loading) return;
     const stored: StoredConversation = {
       version: 2,
       messages: messages.slice(-MAX_STORED_MESSAGES),
       updatedAt: new Date().toISOString(),
     };
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(stored));
-  }, [messages, storageReady]);
+  }, [loading, messages, storageReady]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
@@ -227,11 +239,16 @@ export default function AssistantPage() {
     setMessages((current) => [...current, userMessage]);
     setDraft('');
     setLoading(true);
+    setStatusMessage('Analisando sua pergunta…');
 
     const controller = new AbortController();
     activeRequest.current = controller;
+    const assistantId = crypto.randomUUID();
+    let receivedText = '';
+    let answerAdded = false;
+    let completed = false;
+    let publicError = '';
 
-    let answer: AssistantAnswer | undefined;
     try {
       const response = await fetch('/api/assistant', {
         method: 'POST',
@@ -250,26 +267,99 @@ export default function AssistantPage() {
         signal: controller.signal,
       });
       if (!response.ok) throw new Error(`Status ${response.status}`);
-      answer = (await response.json()) as AssistantAnswer;
+
+      await readAssistantStream(response, async (event) => {
+        if (event.type === 'status') {
+          setStatusMessage(event.message);
+          return;
+        }
+        if (event.type === 'error') {
+          publicError = event.message;
+          return;
+        }
+        if (event.type === 'done') {
+          completed = true;
+          setMessages((current) =>
+            current.map((message) =>
+              message.id === assistantId
+                ? {
+                    ...message,
+                    source: event.source,
+                    mode: event.mode ?? 'Consulta aos dados do Atlas',
+                    engine: event.engine,
+                    iterations: event.iterations,
+                    evidenceCount: event.evidenceCount,
+                  }
+                : message,
+            ),
+          );
+          return;
+        }
+
+        receivedText += event.text;
+        if (!answerAdded) {
+          answerAdded = true;
+          setStreamingMessageId(assistantId);
+          setMessages((current) => [
+            ...current,
+            {
+              id: assistantId,
+              role: 'assistant',
+              text: receivedText,
+              mode: 'Consulta aos dados do Atlas',
+              engine: 'mcp-langgraph',
+            },
+          ]);
+          await waitForStreamFrame();
+          return;
+        }
+        setMessages((current) =>
+          current.map((message) =>
+            message.id === assistantId
+              ? { ...message, text: receivedText }
+              : message,
+          ),
+        );
+        await waitForStreamFrame();
+      });
+
+      if (publicError || !answerAdded || !completed) {
+        throw new Error(publicError || 'Stream interrompido.');
+      }
     } catch {
       if (controller.signal.aborted) return;
-      answer = {
-        text: 'Não consegui responder agora. Tente novamente em instantes.',
-        mode: 'Temporariamente indisponível',
-        engine: 'system',
-      };
+      setMessages((current) => {
+        if (!answerAdded) {
+          return [
+            ...current,
+            {
+              id: assistantId,
+              role: 'assistant',
+              text: 'Não consegui responder agora. Tente novamente em instantes.',
+              mode: 'Temporariamente indisponível',
+              engine: 'system',
+            },
+          ];
+        }
+        return current.map((message) =>
+          message.id === assistantId
+            ? {
+                ...message,
+                text: 'Não consegui responder agora. Tente novamente em instantes.',
+                mode: 'Temporariamente indisponível',
+                engine: 'system',
+              }
+            : message,
+        );
+      });
     } finally {
       if (activeRequest.current === controller) {
         activeRequest.current = null;
         setLoading(false);
+        setStreamingMessageId(undefined);
+        setStatusMessage('Analisando sua pergunta…');
       }
     }
-
-    if (controller.signal.aborted || !answer) return;
-    setMessages((current) => [
-      ...current,
-      { id: crypto.randomUUID(), role: 'assistant', ...answer },
-    ]);
   }
 
   function submit(event: { preventDefault: () => void }) {
@@ -284,6 +374,8 @@ export default function AssistantPage() {
     setMessages([welcomeMessage(context)]);
     setDraft('');
     setLoading(false);
+    setStreamingMessageId(undefined);
+    setStatusMessage('Analisando sua pergunta…');
   }
 
   return (
@@ -381,14 +473,12 @@ export default function AssistantPage() {
                     )}
                   </div>
                 ))}
-                {loading && (
+                {loading && !streamingMessageId && (
                   <div className="flex items-center gap-3 text-xs text-[var(--muted)]">
                     <div className="grid size-8 place-items-center rounded-full bg-[var(--navy)] text-[var(--lime)]">
                       <Database size={15} />
                     </div>
-                    <span className="animate-pulse">
-                      Analisando sua pergunta…
-                    </span>
+                    <span className="animate-pulse">{statusMessage}</span>
                   </div>
                 )}
                 <div ref={bottomRef} />

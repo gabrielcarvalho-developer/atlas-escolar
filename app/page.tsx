@@ -41,6 +41,13 @@ function formatScore(value: number | null) {
     : value.toLocaleString('pt-BR', { maximumFractionDigits: 1 });
 }
 
+function formatPercentage(value: number) {
+  return `${value.toLocaleString('pt-BR', {
+    minimumFractionDigits: 1,
+    maximumFractionDigits: 1,
+  })}%`;
+}
+
 function statusFor(score: number) {
   if (score < 3)
     return {
@@ -539,32 +546,53 @@ export default function OverviewPage() {
               {INFRA_KEYS.map((key) => {
                 const score = context.school.infrastructure[key];
                 const status = statusFor(score);
+                const schoolPercentage = Math.min(100, Math.max(0, score * 10));
+                const municipalPercentage = Math.min(
+                  100,
+                  Math.max(0, context.municipalInfrastructure[key] * 10),
+                );
                 return (
                   <div key={key}>
-                    <div className="mb-2.5 flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <p className="text-sm font-bold leading-snug">
-                          {INFRA_LABELS[key]}
-                        </p>
-                        <p className="mt-1 text-xs text-[var(--muted)]">
-                          Município{' '}
-                          {(context.municipalInfrastructure[key] * 10).toFixed(
-                            1,
-                          )}
-                          %
-                        </p>
-                      </div>
+                    <div className="mb-2.5 flex items-center justify-between gap-3">
+                      <p className="text-sm font-bold leading-snug">
+                        {INFRA_LABELS[key]}
+                      </p>
                       <span
                         className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-bold ${status.tone}`}
                       >
-                        {status.label} · {(score * 10).toFixed(1)}%
+                        {status.label}
                       </span>
                     </div>
-                    <div className="h-2.5 overflow-hidden rounded-full bg-[var(--canvas-deep)]">
+                    <div className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-2.5 gap-y-2 text-xs">
+                      <span className="font-semibold text-[var(--ink)]">
+                        Escola
+                      </span>
                       <div
-                        className={`h-full rounded-full ${status.bar}`}
-                        style={{ width: `${score * 10}%` }}
-                      />
+                        className="h-2.5 overflow-hidden rounded-full bg-[var(--canvas-deep)]"
+                        aria-hidden="true"
+                      >
+                        <div
+                          className={`h-full rounded-full ${status.bar}`}
+                          style={{ width: `${schoolPercentage}%` }}
+                        />
+                      </div>
+                      <span className="min-w-11 text-right font-semibold tabular-nums text-[var(--ink)]">
+                        {formatPercentage(schoolPercentage)}
+                      </span>
+
+                      <span className="text-[var(--muted)]">Município</span>
+                      <div
+                        className="h-2.5 overflow-hidden rounded-full bg-[var(--canvas-deep)]"
+                        aria-hidden="true"
+                      >
+                        <div
+                          className="h-full rounded-full bg-[var(--navy)]/65"
+                          style={{ width: `${municipalPercentage}%` }}
+                        />
+                      </div>
+                      <span className="min-w-11 text-right tabular-nums text-[var(--muted)]">
+                        {formatPercentage(municipalPercentage)}
+                      </span>
                     </div>
                   </div>
                 );

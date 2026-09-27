@@ -5,6 +5,7 @@ import json
 import logging
 import os
 import re
+import unicodedata
 from pathlib import Path
 from typing import Any
 
@@ -32,6 +33,29 @@ INTERNAL_LANGUAGE_PATTERN = re.compile(
     r"(?i)(?:\bMCP\b|\bLangGraph\b|\bPlanner\b|\bReflector\b|"
     r"\bREPLAN\b|\bcompare_schools\b|\bget_[a-z_]+\b|"
     r"campo\s+[\"']?error[\"']?)"
+)
+RESOURCE_BOOLEAN_LABELS = {
+    "water": "água potável",
+    "publicEnergy": "energia da rede pública",
+    "publicSewage": "ligação à rede pública de esgoto",
+    "wasteCollection": "coleta de lixo",
+    "library": "biblioteca",
+    "scienceLab": "laboratório de ciências",
+    "computerLab": "laboratório de informática",
+    "sportsCourt": "quadra de esportes",
+    "cafeteria": "refeitório",
+    "internet": "acesso à internet",
+    "studentInternet": "acesso à internet para alunos",
+    "broadband": "banda larga",
+}
+RESOURCE_COUNT_LABELS = {
+    "totalDevices": "dispositivos para uso dos alunos",
+    "climateControlledRooms": "salas climatizadas",
+    "accessibleRooms": "salas acessíveis",
+}
+RESOURCE_KEY_PATTERN = re.compile(
+    r"\s*\((?:" + "|".join([*RESOURCE_BOOLEAN_LABELS, *RESOURCE_COUNT_LABELS]) + r")\)",
+    re.IGNORECASE,
 )
 
 def _required_env(name: str) -> str:
@@ -110,14 +134,191 @@ def _parse_json_response(content: Any) -> dict[str, Any]:
     return decoded
 
 
+def _fold_text(value: str) -> str:
+    normalized = unicodedata.normalize("NFKD", value.casefold())
+    return "".join(character for character in normalized if not unicodedata.combining(character))
+
+
+def _conversational_answer(question: str) -> str | None:
+    """Responde interações sociais curtas sem acionar o fluxo analítico."""
+    normalized = re.sub(r"[^a-z0-9\s]", " ", _fold_text(question))
+    normalized = re.sub(r"\s+", " ", normalized).strip()
+
+    greetings = {
+        "oi",
+        "ola",
+        "ola atlas",
+        "oi atlas",
+        "bom dia",
+        "bom dia atlas",
+        "boa tarde",
+        "boa tarde atlas",
+        "boa noite",
+        "boa noite atlas",
+        "e ai",
+        "e ai atlas",
+        "oi tudo bem",
+        "ola tudo bem",
+        "tudo bem",
+    }
+    thanks = {"obrigado", "obrigada", "muito obrigado", "muito obrigada", "valeu"}
+    farewells = {"tchau", "ate mais", "ate logo", "falou"}
+    identity_questions = {
+        "quem e voce",
+        "quem e o atlas",
+        "o que e o atlas",
+        "se apresente",
+    }
+    help_questions = {
+        "ajuda",
+        "me ajude",
+        "o que voce faz",
+        "o que voce pode fazer",
+        "como voce pode me ajudar",
+    }
+
+    if normalized in greetings:
+        return (
+            "Olá! Que bom ter você por aqui. Posso ajudar a entender os indicadores da "
+            "escola selecionada, comparar resultados ou identificar pontos de atenção. "
+            "O que você gostaria de saber?"
+        )
+    if normalized in thanks:
+        return (
+            "Por nada! Se quiser, posso continuar a análise ou ajudar com outra pergunta "
+            "sobre a escola."
+        )
+    if normalized in farewells:
+        return "Até mais! Quando precisar analisar os dados da escola, estarei por aqui."
+    if normalized in identity_questions:
+        return (
+            "Sou o Atlas, um assistente para explorar os dados educacionais disponíveis. "
+            "Posso explicar indicadores, comparar resultados e destacar pontos que merecem atenção."
+        )
+    if normalized in help_questions:
+        return (
+            "Posso analisar o desempenho no ENEM, infraestrutura e recursos da escola, além "
+            "de fazer comparações com o município. Experimente perguntar: “Quais são os "
+            "principais pontos de atenção desta escola?”"
+        )
+    return None
+
+
+def _asks_for_missing_resources(question: str) -> bool:
+    folded_question = _fold_text(question)
+    return "recurso" in folded_question and any(
+        term in folded_question
+        for term in ("ausente", "nao tem", "nao estao registrado", "nao registrado")
+    )
+
+
+def _collapse_repeated_blocks(answer: str) -> str:
+    """Interrompe respostas quando o modelo começa a repetir blocos longos."""
+    paragraphs = re.split(r"\n\s*\n", answer.strip())
+    seen: set[str] = set()
+    kept: list[str] = []
+
+    for paragraph in paragraphs:
+        normalized = re.sub(r"\s+", " ", paragraph).strip().casefold()
+        can_signal_loop = len(normalized) >= 60 or paragraph.lstrip().startswith(("- ", "* "))
+        if can_signal_loop and normalized in seen:
+            if kept:
+                bridge = _fold_text(kept[-1])
+                if kept[-1].rstrip().endswith(":") and (
+                    "alem disso" in bridge or "tambem" in bridge
+                ):
+                    kept.pop()
+            logger.warning("Repeated answer block detected; truncating duplicated content.")
+            break
+        seen.add(normalized)
+        kept.append(paragraph.strip())
+
+    return "\n\n".join(kept).strip()
+
+
+def _grounded_resource_answer(
+    question: str, evidence: list[dict[str, Any]]
+) -> str | None:
+    """Formata perguntas sobre recursos diretamente da evidência escolar do MCP."""
+    if not _asks_for_missing_resources(question):
+        return None
+
+    profile: dict[str, Any] | None = None
+    for step in reversed(evidence):
+        for item in reversed(step.get("results", [])):
+            result = item.get("result")
+            if item.get("tool") == "get_school_profile" and isinstance(result, dict):
+                profile = result
+                break
+        if profile is not None:
+            break
+    if profile is None or not isinstance(profile.get("resources"), dict):
+        return None
+
+    resources = profile["resources"]
+    missing = [
+        label
+        for key, label in RESOURCE_BOOLEAN_LABELS.items()
+        if resources.get(key) is False
+    ]
+    zero_counts = [
+        label
+        for key, label in RESOURCE_COUNT_LABELS.items()
+        if not isinstance(resources.get(key), bool) and resources.get(key) == 0
+    ]
+    school_name = str(profile.get("name", "a escola"))
+
+    sections = [
+        f'Na base consultada, a escola **{school_name}** apresenta as informações a seguir.'
+    ]
+    if missing:
+        missing_title = "Recurso não registrado" if len(missing) == 1 else "Recursos não registrados"
+        sections.append(
+            f"**{missing_title}**\n\n"
+            + "\n".join(f"- {label.capitalize()}" for label in missing)
+        )
+    else:
+        sections.append("Não há recursos booleanos marcados como ausentes.")
+    if zero_counts:
+        sections.append(
+            "**Outras informações**\n\n"
+            + "\n".join(f"- {label.capitalize()}: 0" for label in zero_counts)
+            + "\n\nEsses valores indicam quantidades registradas na base."
+        )
+
+    source = profile.get("source")
+    if isinstance(source, str) and source:
+        sections.append(f"Fonte: {source}")
+    return "\n\n".join(sections)
+
+
 def _normalize_plan_for_context(
     steps: list[PlanStep], state: AgentState
 ) -> list[PlanStep]:
     """Corrige comparações escola-município e bloqueia compare_schools inválido."""
+    if _asks_for_missing_resources(state.question) and state.school_code and steps:
+        return [
+            steps[0].model_copy(
+                update={
+                    "tool_calls": [
+                        ToolCall(
+                            tool_name="get_school_profile",
+                            arguments={"school_code": state.school_code},
+                            step_id=steps[0].id,
+                        )
+                    ]
+                }
+            )
+        ]
+
     question = state.question.casefold()
     asks_for_municipality = any(
         term in question for term in ("município", "municipio", "cidade")
     )
+    asks_for_comparison = any(
+        term in question for term in ("compare", "comparar", "comparação", "comparacao")
+    )
+    asks_for_state = "estado" in question or "maranhão" in question or "maranhao" in question
     municipality = state.selection.get("municipality")
     can_compare_with_municipality = (
         asks_for_municipality
@@ -140,6 +341,35 @@ def _normalize_plan_for_context(
                 continue
 
             if not can_compare_with_municipality:
+                if state.school_code and not asks_for_comparison:
+                    logger.warning(
+                        "Planner selected compare_schools for a single-school question; "
+                        "normalizing the plan."
+                    )
+                    calls.append(
+                        ToolCall(
+                            tool_name="get_school_profile",
+                            arguments={"school_code": state.school_code},
+                            step_id=step.id,
+                        )
+                    )
+                    continue
+                if state.school_code and asks_for_state:
+                    calls.extend(
+                        [
+                            ToolCall(
+                                tool_name="get_school_profile",
+                                arguments={"school_code": state.school_code},
+                                step_id=step.id,
+                            ),
+                            ToolCall(
+                                tool_name="get_state_metrics",
+                                arguments={},
+                                step_id=step.id,
+                            ),
+                        ]
+                    )
+                    continue
                 raise ValueError("compare_schools exige de 2 a 5 códigos de escola.")
 
             logger.warning(
@@ -400,6 +630,8 @@ def _interpret_reflector_output(
             "segurança. Tente fazer a pergunta de outra forma ou escolha outra escola."
         )
 
+    answer = RESOURCE_KEY_PATTERN.sub("", _collapse_repeated_blocks(answer))
+
     if INTERNAL_LANGUAGE_PATTERN.search(answer):
         logger.warning("Internal terminology detected in the final answer; using public fallback.")
         answer = (
@@ -476,6 +708,16 @@ async def run_agent(
     selection: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Run the agent end-to-end and return the final answer with metadata."""
+    conversational_answer = _conversational_answer(question)
+    if conversational_answer is not None:
+        return {
+            "answer": conversational_answer,
+            "iterations": 0,
+            "evidence_count": 0,
+            "engine": "atlas-conversation",
+            "mode": "Conversa com o Atlas",
+        }
+
     app = build_agent_graph()
 
     initial_state = AgentState(
@@ -489,7 +731,9 @@ async def run_agent(
         final_state = AgentState.model_validate(await app.ainvoke(initial_state))
         if final_state.error:
             raise RuntimeError(final_state.error)
-        answer = final_state.final_answer.strip()
+        answer = _grounded_resource_answer(question, final_state.evidence)
+        if answer is None:
+            answer = final_state.final_answer.strip()
         if not answer:
             raise RuntimeError("O agente terminou sem produzir uma resposta.")
         sources = _evidence_sources(final_state.evidence)

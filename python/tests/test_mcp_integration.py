@@ -3,6 +3,9 @@ from __future__ import annotations
 from mcp import Client
 
 from agent.graph import (
+    _collapse_repeated_blocks,
+    _conversational_answer,
+    _grounded_resource_answer,
     _interpret_reflector_output,
     _normalize_plan_for_context,
     _openai_compatible_base_url,
@@ -10,6 +13,7 @@ from agent.graph import (
 )
 from agent.mcp_client import REQUIRED_TOOLS, create_mcp_client, decode_tool_result
 from agent.state import AgentState, PlanStep, ToolCall
+from api import _answer_chunks, _sse_event
 from mcp_server import mcp
 
 
@@ -18,6 +22,45 @@ async def test_mcp_server_exposes_the_required_contract() -> None:
         response = await client.list_tools()
 
     assert {tool.name for tool in response.tools} == REQUIRED_TOOLS
+
+
+def test_sse_event_preserves_unicode_and_protocol_boundaries() -> None:
+    event = _sse_event("delta", {"text": "Análise do município"})
+
+    assert event.startswith("event: delta\ndata: ")
+    assert '"text":"Análise do município"' in event
+    assert event.endswith("\n\n")
+
+
+def test_answer_chunks_reconstruct_the_exact_markdown() -> None:
+    answer = "**Análise**\n\n" + "Dados escolares. " * 20
+
+    chunks = _answer_chunks(answer, size=37)
+
+    assert len(chunks) > 1
+    assert "".join(chunks) == answer
+
+
+def test_short_greeting_receives_a_humanized_answer() -> None:
+    answer = _conversational_answer("Oi!")
+
+    assert answer is not None
+    assert answer.startswith("Olá!")
+    assert "indicadores" in answer
+    assert "evidências" not in answer
+
+
+def test_greeting_with_a_data_question_is_not_intercepted() -> None:
+    answer = _conversational_answer("Oi, compare as médias da escola com o município")
+
+    assert answer is None
+
+
+def test_common_social_messages_have_direct_responses() -> None:
+    assert _conversational_answer("Obrigado") is not None
+    assert _conversational_answer("Quem é você?") is not None
+    assert _conversational_answer("O que você pode fazer?") is not None
+    assert _conversational_answer("Até mais") is not None
 
 
 async def test_mcp_tool_returns_real_school_data() -> None:
@@ -186,3 +229,88 @@ def test_invalid_tool_arguments_are_removed_before_execution() -> None:
     assert [call.tool_name for call in normalized[0].tool_calls] == [
         "get_school_profile"
     ]
+
+
+def test_single_school_question_replaces_invalid_comparison() -> None:
+    state = AgentState(
+        question="Quais recursos não estão registrados nesta escola?",
+        school_code="21288780",
+    )
+    steps = [
+        PlanStep(
+            id=1,
+            description="Consultar recursos",
+            tool_calls=[
+                ToolCall(
+                    tool_name="compare_schools",
+                    arguments={"school_codes": ["21288780"]},
+                    step_id=1,
+                ),
+                ToolCall(
+                    tool_name="get_data_methodology",
+                    arguments={},
+                    step_id=1,
+                ),
+            ],
+        )
+    ]
+
+    normalized = _normalize_plan_for_context(steps, state)
+
+    assert [call.tool_name for call in normalized[0].tool_calls] == [
+        "get_school_profile"
+    ]
+
+
+def test_repeated_answer_blocks_are_truncated_before_the_loop() -> None:
+    resource_list = "* Quadra de esportes\n* Internet para alunos\n* Banda larga"
+    answer = (
+        "Recursos não registrados\n\n"
+        "A escola não registra estes recursos:\n\n"
+        f"{resource_list}\n\n"
+        "Além disso, a escola não tem registros de recursos como:\n\n"
+        f"{resource_list}\n\n"
+        f"{resource_list}"
+    )
+
+    cleaned = _collapse_repeated_blocks(answer)
+
+    assert cleaned.count("* Quadra de esportes") == 1
+    assert "Além disso" not in cleaned
+
+
+def test_missing_resources_answer_uses_boolean_and_count_semantics() -> None:
+    evidence = [
+        {
+            "step_id": 1,
+            "results": [
+                {
+                    "tool": "get_school_profile",
+                    "result": {
+                        "name": "Escola Exemplo",
+                        "resources": {
+                            "publicSewage": False,
+                            "sportsCourt": True,
+                            "studentInternet": True,
+                            "broadband": True,
+                            "totalDevices": 23,
+                            "climateControlledRooms": 12,
+                            "accessibleRooms": 0,
+                        },
+                        "source": "Censo Escolar 2025",
+                    },
+                }
+            ],
+        }
+    ]
+
+    answer = _grounded_resource_answer(
+        "Quais recursos não estão registrados nesta escola?", evidence
+    )
+
+    assert answer is not None
+    assert "Ligação à rede pública de esgoto" in answer
+    assert "Salas acessíveis: 0" in answer
+    assert "quadra" not in answer.casefold()
+    assert "sportsCourt" not in answer
+    assert answer.count("Recurso não registrado") == 1

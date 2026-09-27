@@ -11,15 +11,6 @@ type AssistantRequest = {
   selection?: unknown;
 };
 
-type AgentPayload = {
-  answer?: unknown;
-  engine?: unknown;
-  mode?: unknown;
-  iterations?: unknown;
-  evidence_count?: unknown;
-  error?: unknown;
-};
-
 function parseHistory(value: unknown): AssistantConversationTurn[] {
   if (!Array.isArray(value)) return [];
   return value
@@ -63,6 +54,10 @@ function agentEndpoint(baseUrl: string) {
   return normalized.endsWith('/api/agent')
     ? normalized
     : `${normalized}/api/agent`;
+}
+
+function agentStreamEndpoint(baseUrl: string) {
+  return `${agentEndpoint(baseUrl)}/stream`;
 }
 
 function agentTimeout() {
@@ -114,7 +109,7 @@ export async function POST(request: Request) {
     const agentToken = process.env.ATLAS_AGENT_TOKEN?.trim();
     if (agentToken) headers.Authorization = `Bearer ${agentToken}`;
 
-    const response = await fetch(agentEndpoint(agentUrl), {
+    const response = await fetch(agentStreamEndpoint(agentUrl), {
       method: 'POST',
       headers,
       body: JSON.stringify({
@@ -138,30 +133,22 @@ export async function POST(request: Request) {
       );
     }
 
-    const payload = (await response.json()) as AgentPayload;
-    if (typeof payload.answer !== 'string' || !payload.answer.trim()) {
-      console.error('Agente MCP retornou uma resposta vazia ou inválida.');
+    const contentType = response.headers.get('content-type') ?? '';
+    if (!response.body || !contentType.includes('text/event-stream')) {
+      console.error('Agente MCP retornou um stream inválido.');
       return NextResponse.json(
         { error: 'O agente MCP retornou uma resposta inválida.' },
         { status: 502 },
       );
     }
 
-    return NextResponse.json({
-      text: payload.answer.trim(),
-      source: 'Atlas Escolar',
-      mode:
-        typeof payload.mode === 'string'
-          ? payload.mode
-          : 'Consulta aos dados do Atlas',
-      engine:
-        typeof payload.engine === 'string' ? payload.engine : 'mcp-langgraph',
-      iterations:
-        typeof payload.iterations === 'number' ? payload.iterations : undefined,
-      evidenceCount:
-        typeof payload.evidence_count === 'number'
-          ? payload.evidence_count
-          : undefined,
+    return new Response(response.body, {
+      status: 200,
+      headers: {
+        'Content-Type': 'text/event-stream; charset=utf-8',
+        'Cache-Control': 'no-cache, no-transform',
+        'X-Accel-Buffering': 'no',
+      },
     });
   } catch (error) {
     console.error('Falha na comunicação com o agente MCP.', error);

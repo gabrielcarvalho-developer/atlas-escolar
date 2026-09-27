@@ -3,15 +3,18 @@ Receives requests from the Next.js frontend and delegates to the agent.
 """
 from __future__ import annotations
 
+import asyncio
+import json
 import logging
 import os
 import secrets
 from pathlib import Path
-from typing import Annotated, Any
+from typing import Annotated, Any, AsyncIterator
 
 from dotenv import load_dotenv
-from fastapi import Depends, FastAPI, Header, HTTPException
+from fastapi import Depends, FastAPI, Header, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from agent.graph import run_agent
@@ -53,6 +56,86 @@ class AgentResponse(BaseModel):
     error: str | None = None
 
 
+def _sse_event(event: str, payload: dict[str, Any]) -> str:
+    """Serializa um evento SSE sem expor detalhes internos do agente."""
+    data = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
+    return f"event: {event}\ndata: {data}\n\n"
+
+
+def _answer_chunks(answer: str, size: int = 18) -> list[str]:
+    """Divide a resposta preservando exatamente seu conteúdo e Markdown."""
+    return [answer[index : index + size] for index in range(0, len(answer), size)]
+
+
+async def _stream_agent_response(
+    agent_request: AgentRequest,
+    http_request: Request,
+) -> AsyncIterator[str]:
+    yield _sse_event("status", {"message": "Analisando sua pergunta…"})
+    task = asyncio.create_task(
+        run_agent(
+            question=agent_request.question,
+            history=agent_request.history,
+            school_code=agent_request.school_code,
+            selection=agent_request.selection,
+        )
+    )
+
+    try:
+        while True:
+            if await http_request.is_disconnected():
+                task.cancel()
+                return
+            try:
+                result = await asyncio.wait_for(asyncio.shield(task), timeout=5)
+                break
+            except TimeoutError:
+                yield ": keep-alive\n\n"
+    except asyncio.CancelledError:
+        task.cancel()
+        raise
+    except Exception:
+        logger.exception("Agent stream failed")
+        if not task.done():
+            task.cancel()
+        yield _sse_event(
+            "error",
+            {"message": "Não consegui responder agora. Tente novamente em instantes."},
+        )
+        return
+
+    if result.get("error"):
+        yield _sse_event(
+            "error",
+            {"message": "Não consegui responder agora. Tente novamente em instantes."},
+        )
+        return
+
+    answer = str(result.get("answer", "")).strip()
+    if not answer:
+        yield _sse_event(
+            "error",
+            {"message": "Não consegui concluir a resposta. Tente novamente."},
+        )
+        return
+
+    for chunk in _answer_chunks(answer):
+        yield _sse_event("delta", {"text": chunk})
+        # Evita que servidores intermediários agrupem toda a resposta em um único pacote.
+        await asyncio.sleep(0.01)
+
+    yield _sse_event(
+        "done",
+        {
+            "source": "Atlas Escolar",
+            "mode": "Consulta aos dados do Atlas",
+            "engine": result.get("engine", "mcp-langgraph"),
+            "iterations": result.get("iterations", 0),
+            "evidenceCount": result.get("evidence_count", 0),
+        },
+    )
+
+
 def authorize_agent(
     authorization: Annotated[str | None, Header()] = None,
 ) -> None:
@@ -92,6 +175,31 @@ async def agent_endpoint(request: AgentRequest) -> AgentResponse:
     except Exception as exc:
         logger.exception("Agent endpoint failed")
         raise HTTPException(status_code=500, detail="Falha interna no agente.") from exc
+
+
+@app.post(
+    "/api/agent/stream",
+    dependencies=[Depends(authorize_agent)],
+)
+async def agent_stream_endpoint(
+    request: AgentRequest,
+    http_request: Request,
+) -> StreamingResponse:
+    """Entrega status e resposta do agente como Server-Sent Events."""
+    logger.info(
+        "Agent stream request: question=%r school=%s history_len=%d",
+        request.question[:80],
+        request.school_code,
+        len(request.history),
+    )
+    return StreamingResponse(
+        _stream_agent_response(request, http_request),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache, no-transform",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 @app.get("/health")

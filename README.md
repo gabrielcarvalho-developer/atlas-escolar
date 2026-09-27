@@ -27,7 +27,7 @@ Ao substituir uma entrega, preserve os nomes dos arquivos e atualize o dicionár
 
 ## Assistente via MCP
 
-O assistente usa um único fluxo: `Next.js -> API Python/LangGraph -> MCP -> dados`. Não há resposta Llama direta nem fallback determinístico no Next.js. Se a API ou o MCP estiverem indisponíveis, a interface informa a indisponibilidade em vez de gerar uma resposta por outro mecanismo.
+O assistente usa um único fluxo: `Next.js -> API Python/LangGraph -> MCP -> dados`. A API entrega status e resposta ao navegador por SSE (`POST /api/agent/stream`), com keep-alive durante o processamento. Não há resposta Llama direta nem fallback determinístico no Next.js. Se a API ou o MCP estiverem indisponíveis, a interface informa a indisponibilidade em vez de gerar uma resposta por outro mecanismo.
 
 O servidor MCP expõe oito ferramentas auditáveis e é iniciado por `stdio` pela API Python. Para produção, `MCP_SERVER_URL` permite trocar o subprocesso local por um endpoint MCP Streamable HTTP sem alterar o agente.
 
