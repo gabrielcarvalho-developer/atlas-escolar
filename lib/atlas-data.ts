@@ -106,6 +106,8 @@ type MunicipalityRow = {
   CO_MUNICIPIO: string;
   NO_MUNICIPIO: string;
   QTD_ESCOLAS: number;
+  QTD_ESCOLAS_URBANAS: number;
+  QTD_ESCOLAS_RURAIS: number;
   QTD_ESCOLAS_ENSINO_MEDIO: number;
   PCT_ESCOLAS_AGUA_POTAVEL: number;
   PCT_ESCOLAS_ENERGIA_REDE_PUBLICA: number;
@@ -125,7 +127,15 @@ type MunicipalityRow = {
   PCT_ESCOLAS_RAMPAS: number;
   PCT_ESCOLAS_PISOS_TATEIS: number;
   PCT_ESCOLAS_SINALIZACAO_ACESSIVEL: number;
+  PCT_ESCOLAS_SEM_ACESSIBILIDADE: number;
+  TOTAL_DESKTOPS_ALUNOS: number;
+  TOTAL_PORTATEIS_ALUNOS: number;
+  TOTAL_TABLETS_ALUNOS: number;
+  TOTAL_SALAS_UTILIZADAS: number;
+  TOTAL_SALAS_CLIMATIZADAS: number;
+  TOTAL_SALAS_ACESSIVEIS: number;
   PCT_SALAS_CLIMATIZADAS: number;
+  PCT_SALAS_ACESSIVEIS: number;
   QTD_REGISTROS_ENEM: number;
   QTD_ESCOLAS_ENEM_TOTAL: number;
   QTD_ESCOLAS_ENEM_IDENTIFICADAS_CENSO: number;
@@ -245,6 +255,8 @@ export type Municipality = {
   name: string;
   year: number;
   schoolCount: number;
+  urbanSchoolCount: number;
+  ruralSchoolCount: number;
   highSchoolCount: number;
   enemRecords: number;
   enemSchoolCount: number;
@@ -255,6 +267,28 @@ export type Municipality = {
   participants: Record<EnemAreaKey, number>;
   averages: Record<EnemAreaKey, number> & { validEssay: number };
   infrastructure: Record<InfraKey, number>;
+  indicators: TerritoryIndicators;
+  devices: { desktops: number; laptops: number; tablets: number };
+  rooms: { used: number; climateControlled: number; accessible: number };
+};
+
+export type TerritoryIndicators = {
+  water: number;
+  publicEnergy: number;
+  publicSewage: number;
+  wasteCollection: number;
+  library: number;
+  scienceLab: number;
+  computerLab: number;
+  sportsCourt: number;
+  cafeteria: number;
+  internet: number;
+  studentInternet: number;
+  learningInternet: number;
+  broadband: number;
+  noAccessibility: number;
+  climateRooms: number;
+  accessibleRooms: number;
 };
 
 export type TerritoryMetrics = {
@@ -263,6 +297,8 @@ export type TerritoryMetrics = {
   eyebrow: string;
   year: number;
   schoolCount: number;
+  urbanSchoolCount: number;
+  ruralSchoolCount: number;
   highSchoolCount: number;
   enemRecords: number;
   enemSchoolCount: number;
@@ -271,6 +307,9 @@ export type TerritoryMetrics = {
   participants: Record<EnemAreaKey, number>;
   averages: Record<EnemAreaKey, number>;
   infrastructure: Record<InfraKey, number>;
+  indicators: TerritoryIndicators;
+  devices: { desktops: number; laptops: number; tablets: number };
+  rooms: { used: number; climateControlled: number; accessible: number };
 };
 
 export type HistoricalPoint = {
@@ -334,6 +373,27 @@ function municipalityInfrastructure(
         row.PCT_ESCOLAS_SINALIZACAO_ACESSIVEL,
       ]) / 10,
     climate: row.PCT_SALAS_CLIMATIZADAS / 10,
+  };
+}
+
+function municipalityIndicators(row: MunicipalityRow): TerritoryIndicators {
+  return {
+    water: row.PCT_ESCOLAS_AGUA_POTAVEL,
+    publicEnergy: row.PCT_ESCOLAS_ENERGIA_REDE_PUBLICA,
+    publicSewage: row.PCT_ESCOLAS_ESGOTO_REDE_PUBLICA,
+    wasteCollection: row.PCT_ESCOLAS_COLETA_LIXO,
+    library: row.PCT_ESCOLAS_BIBLIOTECA_LEITURA,
+    scienceLab: row.PCT_ESCOLAS_LAB_CIENCIAS,
+    computerLab: row.PCT_ESCOLAS_LAB_INFORMATICA,
+    sportsCourt: row.PCT_ESCOLAS_QUADRA,
+    cafeteria: row.PCT_ESCOLAS_REFEITORIO,
+    internet: row.PCT_ESCOLAS_INTERNET,
+    studentInternet: row.PCT_ESCOLAS_INTERNET_ALUNOS,
+    learningInternet: row.PCT_ESCOLAS_INTERNET_APRENDIZAGEM,
+    broadband: row.PCT_ESCOLAS_BANDA_LARGA,
+    noAccessibility: row.PCT_ESCOLAS_SEM_ACESSIBILIDADE,
+    climateRooms: row.PCT_SALAS_CLIMATIZADAS,
+    accessibleRooms: row.PCT_SALAS_ACESSIVEIS,
   };
 }
 
@@ -408,6 +468,8 @@ function municipalityFromRow(row: MunicipalityRow, year: number): Municipality {
     name: row.NO_MUNICIPIO,
     year,
     schoolCount: row.QTD_ESCOLAS,
+    urbanSchoolCount: row.QTD_ESCOLAS_URBANAS,
+    ruralSchoolCount: row.QTD_ESCOLAS_RURAIS,
     highSchoolCount: row.QTD_ESCOLAS_ENSINO_MEDIO,
     enemRecords: row.QTD_REGISTROS_ENEM,
     enemSchoolCount: row.QTD_ESCOLAS_ENEM_TOTAL,
@@ -432,6 +494,17 @@ function municipalityFromRow(row: MunicipalityRow, year: number): Municipality {
       validEssay: row.MEDIA_REDACAO_SEM_PROBLEMAS,
     },
     infrastructure: municipalityInfrastructure(row),
+    indicators: municipalityIndicators(row),
+    devices: {
+      desktops: row.TOTAL_DESKTOPS_ALUNOS,
+      laptops: row.TOTAL_PORTATEIS_ALUNOS,
+      tablets: row.TOTAL_TABLETS_ALUNOS,
+    },
+    rooms: {
+      used: row.TOTAL_SALAS_UTILIZADAS,
+      climateControlled: row.TOTAL_SALAS_CLIMATIZADAS,
+      accessible: row.TOTAL_SALAS_ACESSIVEIS,
+    },
   };
 }
 
@@ -510,6 +583,8 @@ export function buildMunicipalityMetrics(
     eyebrow: 'Município do Maranhão',
     year,
     schoolCount: municipality.schoolCount,
+    urbanSchoolCount: municipality.urbanSchoolCount,
+    ruralSchoolCount: municipality.ruralSchoolCount,
     highSchoolCount: municipality.highSchoolCount,
     enemRecords: municipality.enemRecords,
     enemSchoolCount: municipality.enemSchoolCount,
@@ -524,6 +599,9 @@ export function buildMunicipalityMetrics(
       essay: municipality.averages.essay,
     },
     infrastructure: municipality.infrastructure,
+    indicators: municipality.indicators,
+    devices: municipality.devices,
+    rooms: municipality.rooms,
   };
 }
 
@@ -537,14 +615,32 @@ export function buildStateMetrics(year = DEFAULT_YEAR): TerritoryMetrics {
     (total, municipality) => total + municipality.linkedEnemSchoolCount,
     0,
   );
+  const schoolCount = municipalities.reduce(
+    (total, municipality) => total + municipality.schoolCount,
+    0,
+  );
+  const rooms = municipalities.reduce(
+    (total, municipality) => ({
+      used: total.used + municipality.rooms.used,
+      climateControlled:
+        total.climateControlled + municipality.rooms.climateControlled,
+      accessible: total.accessible + municipality.rooms.accessible,
+    }),
+    { used: 0, climateControlled: 0, accessible: 0 },
+  );
 
   return {
     kind: 'state',
     name: 'Maranhão',
     eyebrow: 'Visão estadual',
     year,
-    schoolCount: municipalities.reduce(
-      (total, municipality) => total + municipality.schoolCount,
+    schoolCount,
+    urbanSchoolCount: municipalities.reduce(
+      (total, municipality) => total + municipality.urbanSchoolCount,
+      0,
+    ),
+    ruralSchoolCount: municipalities.reduce(
+      (total, municipality) => total + municipality.ruralSchoolCount,
       0,
     ),
     highSchoolCount,
@@ -591,6 +687,36 @@ export function buildStateMetrics(year = DEFAULT_YEAR): TerritoryMetrics {
         ),
       ]),
     ) as Record<InfraKey, number>,
+    indicators: Object.fromEntries(
+      (Object.keys(municipalities[0]?.indicators ?? {}) as Array<
+        keyof TerritoryIndicators
+      >).map((key) => [
+        key,
+        key === 'climateRooms'
+          ? rooms.used
+            ? (rooms.climateControlled / rooms.used) * 100
+            : 0
+          : key === 'accessibleRooms'
+            ? rooms.used
+              ? (rooms.accessible / rooms.used) * 100
+              : 0
+            : weightedAverage(
+                municipalities.map((municipality) => ({
+                  value: municipality.indicators[key],
+                  weight: municipality.schoolCount,
+                })),
+              ),
+      ]),
+    ) as TerritoryIndicators,
+    devices: municipalities.reduce(
+      (total, municipality) => ({
+        desktops: total.desktops + municipality.devices.desktops,
+        laptops: total.laptops + municipality.devices.laptops,
+        tablets: total.tablets + municipality.devices.tablets,
+      }),
+      { desktops: 0, laptops: 0, tablets: 0 },
+    ),
+    rooms,
   };
 }
 

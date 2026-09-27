@@ -10,53 +10,48 @@ export type AtlasSelectOption = {
 const styles: StylesConfig<AtlasSelectOption, false> = {
   control: (base, state) => ({
     ...base,
-    minHeight: 46,
-    borderColor: state.isFocused
-      ? 'rgba(200, 236, 81, .72)'
-      : 'rgba(255, 255, 255, .14)',
-    borderRadius: state.menuIsOpen ? '8px 8px 0 0' : 8,
-    backgroundColor: state.isFocused
-      ? 'rgba(255, 255, 255, .09)'
-      : 'rgba(255, 255, 255, .06)',
+    minHeight: 42,
+    borderColor: state.isFocused ? 'var(--teal)' : 'var(--line)',
+    borderRadius: state.menuIsOpen ? '12px 12px 0 0' : 12,
+    backgroundColor: 'var(--surface)',
     boxShadow: 'none',
     cursor: 'pointer',
     transition: 'border-color 160ms ease, background-color 160ms ease',
     ':hover': {
-      borderColor: 'rgba(255, 255, 255, .26)',
-      backgroundColor: 'rgba(255, 255, 255, .09)',
+      borderColor: 'var(--line-strong)',
     },
   }),
-  valueContainer: (base) => ({ ...base, padding: '8px 12px' }),
+  valueContainer: (base) => ({ ...base, padding: '6px 10px' }),
   singleValue: (base) => ({
     ...base,
-    color: '#fff',
-    fontSize: 14,
+    color: 'var(--ink)',
+    fontSize: 12,
     fontWeight: 600,
   }),
-  input: (base) => ({ ...base, color: '#fff', fontSize: 16 }),
+  input: (base) => ({ ...base, color: 'var(--ink)', fontSize: 13 }),
   indicatorsContainer: (base) => ({ ...base, paddingRight: 4 }),
   indicatorSeparator: () => ({ display: 'none' }),
   dropdownIndicator: (base, state) => ({
     ...base,
-    color: state.isFocused ? '#c8ec51' : 'rgba(255, 255, 255, .44)',
+    color: state.isFocused ? 'var(--teal)' : 'var(--muted)',
     padding: 6,
-    ':hover': { color: '#c8ec51' },
+    ':hover': { color: 'var(--teal)' },
   }),
   menu: (base) => ({
     ...base,
     zIndex: 60,
     marginTop: 0,
     overflow: 'hidden',
-    border: '1px solid rgba(255, 255, 255, .16)',
+    border: '1px solid var(--line)',
     borderTop: 0,
-    borderRadius: '0 0 8px 8px',
-    backgroundColor: '#203741',
-    boxShadow: '0 14px 32px rgba(7, 20, 26, .28)',
+    borderRadius: '0 0 12px 12px',
+    backgroundColor: 'var(--surface-raised)',
+    boxShadow: '0 16px 34px rgba(0, 0, 0, .16)',
   }),
   menuList: (base) => ({
     ...base,
     padding: 0,
-    scrollbarColor: 'rgba(200, 236, 81, .48) transparent',
+    scrollbarColor: 'var(--line-strong) transparent',
     scrollbarWidth: 'thin',
   }),
   option: (base, state) => ({
@@ -64,23 +59,23 @@ const styles: StylesConfig<AtlasSelectOption, false> = {
     margin: 0,
     minHeight: 44,
     padding: '11px 12px',
-    borderBottom: '1px solid rgba(255, 255, 255, .08)',
+    borderBottom: '1px solid var(--line)',
     borderRadius: 0,
     backgroundColor: state.isSelected
-      ? 'rgba(200, 236, 81, .16)'
+      ? 'var(--teal-soft)'
       : state.isFocused
-        ? 'rgba(255, 255, 255, .08)'
+        ? 'var(--surface-soft)'
         : 'transparent',
-    color: state.isSelected ? '#dff68b' : 'rgba(255, 255, 255, .84)',
+    color: state.isSelected ? 'var(--teal)' : 'var(--ink)',
     cursor: 'pointer',
     fontSize: 14,
     fontWeight: 600,
-    ':active': { backgroundColor: 'rgba(200, 236, 81, .12)' },
+    ':active': { backgroundColor: 'var(--teal-soft)' },
     ':last-of-type': { borderBottom: 0 },
   }),
   noOptionsMessage: (base) => ({
     ...base,
-    color: 'rgba(255, 255, 255, .56)',
+    color: 'var(--muted)',
     fontSize: 13,
   }),
 };

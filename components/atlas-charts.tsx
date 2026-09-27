@@ -29,8 +29,8 @@ import {
 } from '@/lib/atlas-data';
 
 const infrastructureConfig = {
-  school: { label: 'Escola', color: '#087c70' },
-  municipality: { label: 'Média municipal', color: '#d7d3c5' },
+  school: { label: 'Escola', color: 'var(--teal)' },
+  municipality: { label: 'Média municipal', color: 'var(--chart-muted)' },
 } satisfies ChartConfig;
 
 export function InfrastructureChart({ context }: { context: SchoolContext }) {
@@ -54,13 +54,13 @@ export function InfrastructureChart({ context }: { context: SchoolContext }) {
         margin={{ top: 18, right: 0, left: -20, bottom: 10 }}
         barGap={2}
       >
-        <CartesianGrid vertical={false} stroke="#ecece7" />
+        <CartesianGrid vertical={false} stroke="var(--chart-grid)" />
         <XAxis
           dataKey="label"
           tickLine={false}
           axisLine={false}
           interval={0}
-          tick={{ fontSize: 11, fill: '#627178' }}
+          tick={{ fontSize: 11, fill: 'var(--muted)' }}
           dy={9}
         />
         <YAxis
@@ -69,14 +69,15 @@ export function InfrastructureChart({ context }: { context: SchoolContext }) {
           tickFormatter={(value) => `${value}%`}
           tickLine={false}
           axisLine={false}
-          tick={{ fontSize: 11, fill: '#7d878c' }}
+          tick={{ fontSize: 11, fill: 'var(--muted)' }}
         />
         <ChartTooltip
-          cursor={{ fill: '#f2f5f1' }}
+          cursor={{ fill: 'var(--surface-soft)' }}
           content={<ChartTooltipContent indicator="dot" />}
         />
         <Bar
           dataKey="school"
+          isAnimationActive={false}
           name="school"
           fill="var(--color-school)"
           radius={[6, 6, 2, 2]}
@@ -85,6 +86,7 @@ export function InfrastructureChart({ context }: { context: SchoolContext }) {
         {context.compareMunicipal && (
           <Bar
             dataKey="municipality"
+            isAnimationActive={false}
             name="municipality"
             fill="var(--color-municipality)"
             radius={[6, 6, 2, 2]}
@@ -97,8 +99,8 @@ export function InfrastructureChart({ context }: { context: SchoolContext }) {
 }
 
 const performanceConfig = {
-  school: { label: 'Escola', color: '#087c70' },
-  municipality: { label: 'Média municipal', color: '#d7d3c5' },
+  school: { label: 'Escola', color: 'var(--teal)' },
+  municipality: { label: 'Média municipal', color: 'var(--chart-muted)' },
 } satisfies ChartConfig;
 
 export function EnemPerformanceChart({ context }: { context: SchoolContext }) {
@@ -123,13 +125,13 @@ export function EnemPerformanceChart({ context }: { context: SchoolContext }) {
         margin={{ top: 18, right: 0, left: -19, bottom: 10 }}
         barGap={2}
       >
-        <CartesianGrid vertical={false} stroke="#ecece7" />
+        <CartesianGrid vertical={false} stroke="var(--chart-grid)" />
         <XAxis
           dataKey="label"
           tickLine={false}
           axisLine={false}
           interval={0}
-          tick={{ fontSize: 11, fill: '#627178' }}
+          tick={{ fontSize: 11, fill: 'var(--muted)' }}
           dy={9}
         />
         <YAxis
@@ -137,14 +139,15 @@ export function EnemPerformanceChart({ context }: { context: SchoolContext }) {
           ticks={[0, 250, 500, 750, 1000]}
           tickLine={false}
           axisLine={false}
-          tick={{ fontSize: 11, fill: '#7d878c' }}
+          tick={{ fontSize: 11, fill: 'var(--muted)' }}
         />
         <ChartTooltip
-          cursor={{ fill: '#f2f5f1' }}
+          cursor={{ fill: 'var(--surface-soft)' }}
           content={<ChartTooltipContent indicator="dot" />}
         />
         <Bar
           dataKey="school"
+          isAnimationActive={false}
           name="school"
           fill="var(--color-school)"
           radius={[6, 6, 2, 2]}
@@ -153,6 +156,7 @@ export function EnemPerformanceChart({ context }: { context: SchoolContext }) {
         {context.compareMunicipal && (
           <Bar
             dataKey="municipality"
+            isAnimationActive={false}
             name="municipality"
             fill="var(--color-municipality)"
             radius={[6, 6, 2, 2]}
@@ -172,10 +176,10 @@ export function TerritoryInfrastructureChart({
   secondary?: TerritoryMetrics;
 }) {
   const config = {
-    primary: { label: primary.name, color: '#087c70' },
+    primary: { label: primary.name, color: 'var(--teal)' },
     secondary: {
       label: secondary?.name ?? 'Comparação',
-      color: '#203741',
+      color: 'var(--ink)',
     },
   } satisfies ChartConfig;
   const data = INFRA_KEYS.map((key) => ({
@@ -198,13 +202,13 @@ export function TerritoryInfrastructureChart({
         margin={{ top: 18, right: 0, left: -20, bottom: 10 }}
         barGap={3}
       >
-        <CartesianGrid vertical={false} stroke="#ecece7" />
+        <CartesianGrid vertical={false} stroke="var(--chart-grid)" />
         <XAxis
           dataKey="label"
           tickLine={false}
           axisLine={false}
           interval={0}
-          tick={{ fontSize: 11, fill: '#627178' }}
+          tick={{ fontSize: 11, fill: 'var(--muted)' }}
           dy={9}
         />
         <YAxis
@@ -213,14 +217,15 @@ export function TerritoryInfrastructureChart({
           tickFormatter={(value) => `${value}%`}
           tickLine={false}
           axisLine={false}
-          tick={{ fontSize: 11, fill: '#7d878c' }}
+          tick={{ fontSize: 11, fill: 'var(--muted)' }}
         />
         <ChartTooltip
-          cursor={{ fill: '#f2f5f1' }}
+          cursor={{ fill: 'var(--surface-soft)' }}
           content={<ChartTooltipContent indicator="dot" />}
         />
         <Bar
           dataKey="primary"
+          isAnimationActive={false}
           name="primary"
           fill="var(--color-primary)"
           radius={[6, 6, 2, 2]}
@@ -229,6 +234,7 @@ export function TerritoryInfrastructureChart({
         {secondary && (
           <Bar
             dataKey="secondary"
+            isAnimationActive={false}
             name="secondary"
             fill="var(--color-secondary)"
             radius={[6, 6, 2, 2]}
@@ -248,10 +254,10 @@ export function TerritoryPerformanceChart({
   secondary?: TerritoryMetrics;
 }) {
   const config = {
-    primary: { label: primary.name, color: '#087c70' },
+    primary: { label: primary.name, color: 'var(--teal)' },
     secondary: {
       label: secondary?.name ?? 'Comparação',
-      color: '#203741',
+      color: 'var(--ink)',
     },
   } satisfies ChartConfig;
   const data = ENEM_AREA_KEYS.map((key) => ({
@@ -274,13 +280,13 @@ export function TerritoryPerformanceChart({
         margin={{ top: 18, right: 0, left: -19, bottom: 10 }}
         barGap={3}
       >
-        <CartesianGrid vertical={false} stroke="#ecece7" />
+        <CartesianGrid vertical={false} stroke="var(--chart-grid)" />
         <XAxis
           dataKey="label"
           tickLine={false}
           axisLine={false}
           interval={0}
-          tick={{ fontSize: 11, fill: '#627178' }}
+          tick={{ fontSize: 11, fill: 'var(--muted)' }}
           dy={9}
         />
         <YAxis
@@ -288,14 +294,15 @@ export function TerritoryPerformanceChart({
           ticks={[0, 250, 500, 750, 1000]}
           tickLine={false}
           axisLine={false}
-          tick={{ fontSize: 11, fill: '#7d878c' }}
+          tick={{ fontSize: 11, fill: 'var(--muted)' }}
         />
         <ChartTooltip
-          cursor={{ fill: '#f2f5f1' }}
+          cursor={{ fill: 'var(--surface-soft)' }}
           content={<ChartTooltipContent indicator="dot" />}
         />
         <Bar
           dataKey="primary"
+          isAnimationActive={false}
           name="primary"
           fill="var(--color-primary)"
           radius={[6, 6, 2, 2]}
@@ -304,6 +311,7 @@ export function TerritoryPerformanceChart({
         {secondary && (
           <Bar
             dataKey="secondary"
+            isAnimationActive={false}
             name="secondary"
             fill="var(--color-secondary)"
             radius={[6, 6, 2, 2]}
@@ -316,8 +324,8 @@ export function TerritoryPerformanceChart({
 }
 
 const saebConfig = {
-  portuguese: { label: 'Língua Portuguesa', color: '#087c70' },
-  mathematics: { label: 'Matemática', color: '#c8ec51' },
+  portuguese: { label: 'Língua Portuguesa', color: 'var(--teal)' },
+  mathematics: { label: 'Matemática', color: 'var(--lime)' },
 } satisfies ChartConfig;
 
 export function SaebStateChart({ year }: { year: number }) {
@@ -343,13 +351,13 @@ export function SaebStateChart({ year }: { year: number }) {
         margin={{ top: 18, right: 0, left: -19, bottom: 10 }}
         barGap={2}
       >
-        <CartesianGrid vertical={false} stroke="#ecece7" />
+        <CartesianGrid vertical={false} stroke="var(--chart-grid)" />
         <XAxis
           dataKey="label"
           tickLine={false}
           axisLine={false}
           interval={0}
-          tick={{ fontSize: 11, fill: '#627178' }}
+          tick={{ fontSize: 11, fill: 'var(--muted)' }}
           dy={9}
         />
         <YAxis
@@ -357,14 +365,15 @@ export function SaebStateChart({ year }: { year: number }) {
           ticks={[0, 100, 200, 300, 400]}
           tickLine={false}
           axisLine={false}
-          tick={{ fontSize: 11, fill: '#7d878c' }}
+          tick={{ fontSize: 11, fill: 'var(--muted)' }}
         />
         <ChartTooltip
-          cursor={{ fill: '#f2f5f1' }}
+          cursor={{ fill: 'var(--surface-soft)' }}
           content={<ChartTooltipContent indicator="dot" />}
         />
         <Bar
           dataKey="portuguese"
+          isAnimationActive={false}
           name="portuguese"
           fill="var(--color-portuguese)"
           radius={[6, 6, 2, 2]}
@@ -372,6 +381,7 @@ export function SaebStateChart({ year }: { year: number }) {
         />
         <Bar
           dataKey="mathematics"
+          isAnimationActive={false}
           name="mathematics"
           fill="var(--color-mathematics)"
           radius={[6, 6, 2, 2]}
@@ -383,11 +393,11 @@ export function SaebStateChart({ year }: { year: number }) {
 }
 
 const historicalPerformanceConfig = {
-  cn: { label: ENEM_AREA_SHORT_LABELS.cn, color: '#087c70' },
-  ch: { label: ENEM_AREA_SHORT_LABELS.ch, color: '#203741' },
-  lc: { label: ENEM_AREA_SHORT_LABELS.lc, color: '#66842a' },
-  mt: { label: ENEM_AREA_SHORT_LABELS.mt, color: '#ca7b36' },
-  essay: { label: ENEM_AREA_SHORT_LABELS.essay, color: '#8b5da7' },
+  cn: { label: ENEM_AREA_SHORT_LABELS.cn, color: '#7c83f4' },
+  ch: { label: ENEM_AREA_SHORT_LABELS.ch, color: '#54a7db' },
+  lc: { label: ENEM_AREA_SHORT_LABELS.lc, color: '#63bb95' },
+  mt: { label: ENEM_AREA_SHORT_LABELS.mt, color: '#e59a5b' },
+  essay: { label: ENEM_AREA_SHORT_LABELS.essay, color: '#b17ad0' },
 } satisfies ChartConfig;
 
 export function HistoricalPerformanceChart({
@@ -412,7 +422,7 @@ export function HistoricalPerformanceChart({
         data={data}
         margin={{ top: 18, right: 12, left: -12, bottom: 8 }}
       >
-        <CartesianGrid vertical={false} stroke="#ecece7" />
+        <CartesianGrid vertical={false} stroke="var(--chart-grid)" />
         <XAxis dataKey="year" tickLine={false} axisLine={false} dy={9} />
         <YAxis
           domain={[0, 1000]}
@@ -445,14 +455,14 @@ export function HistoricalPerformanceChart({
 }
 
 const historicalInfrastructureConfig = {
-  basicServices: { label: INFRA_SHORT_LABELS.basicServices, color: '#087c70' },
+  basicServices: { label: INFRA_SHORT_LABELS.basicServices, color: '#7c83f4' },
   learningSpaces: {
     label: INFRA_SHORT_LABELS.learningSpaces,
-    color: '#203741',
+    color: '#54a7db',
   },
-  connectivity: { label: INFRA_SHORT_LABELS.connectivity, color: '#66842a' },
-  accessibility: { label: INFRA_SHORT_LABELS.accessibility, color: '#ca7b36' },
-  climate: { label: INFRA_SHORT_LABELS.climate, color: '#8b5da7' },
+  connectivity: { label: INFRA_SHORT_LABELS.connectivity, color: '#63bb95' },
+  accessibility: { label: INFRA_SHORT_LABELS.accessibility, color: '#e59a5b' },
+  climate: { label: INFRA_SHORT_LABELS.climate, color: '#b17ad0' },
 } satisfies ChartConfig;
 
 export function HistoricalInfrastructureChart({
@@ -480,7 +490,7 @@ export function HistoricalInfrastructureChart({
         data={data}
         margin={{ top: 18, right: 12, left: -12, bottom: 8 }}
       >
-        <CartesianGrid vertical={false} stroke="#ecece7" />
+        <CartesianGrid vertical={false} stroke="var(--chart-grid)" />
         <XAxis dataKey="year" tickLine={false} axisLine={false} dy={9} />
         <YAxis
           domain={[0, 100]}

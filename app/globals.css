@@ -5,8 +5,8 @@
 @theme inline {
   --color-background: var(--canvas);
   --color-foreground: var(--ink);
-  --font-sans: var(--font-nunito);
-  --font-mono: var(--font-nunito);
+  --font-sans: var(--font-inter);
+  --font-mono: var(--font-inter);
   --color-border: var(--line);
   --color-input: var(--line);
   --color-ring: var(--teal);
@@ -14,11 +14,11 @@
   --color-primary-foreground: #ffffff;
   --color-secondary: var(--lemon);
   --color-secondary-foreground: var(--navy);
-  --color-muted: #edf1ec;
+  --color-muted: var(--surface-soft);
   --color-muted-foreground: var(--muted);
-  --color-card: #ffffff;
+  --color-card: var(--surface);
   --color-card-foreground: var(--ink);
-  --color-popover: #ffffff;
+  --color-popover: var(--surface);
   --color-popover-foreground: var(--ink);
   --color-accent: var(--teal-soft);
   --color-accent-foreground: var(--teal);
@@ -30,26 +30,37 @@
 }
 
 :root {
-  --canvas: #f2f5f1;
-  --canvas-deep: #e9eee8;
-  --ink: #15282f;
-  --muted: #627178;
-  --navy: #142f38;
-  --navy-soft: #1d3b44;
-  --teal: #087c70;
-  --teal-strong: #05665e;
-  --teal-soft: #e0f1ec;
-  --lime: #cdef68;
-  --lemon: #eff7c9;
-  --sand: #e4e3d7;
-  --line: #dce3dc;
-  --line-strong: #c5cfc7;
+  --canvas: #f7f8fb;
+  --canvas-deep: #eef0f5;
+  --ink: #191b22;
+  --muted: #727783;
+  --navy: #181b25;
+  --navy-soft: #252936;
+  --teal: #6267df;
+  --teal-strong: #4e53c7;
+  --teal-soft: #eeefff;
+  --lime: #d8ef83;
+  --lemon: #f2f7d9;
+  --sand: #eeedf2;
+  --line: #e7e8ed;
+  --line-strong: #d6d8df;
   --surface: #ffffff;
+  --surface-soft: #f4f5f7;
+  --surface-raised: #ffffff;
+  --lavender: #eeecff;
+  --sky: #eaf4ff;
+  --mint: #eaf8f2;
+  --peach: #fff2e8;
+  --chart-grid: #e8e9ee;
+  --chart-muted: #b8bdc8;
+  --positive: #2b8a68;
+  --warning: #b47720;
+  --danger: #c45454;
   --background: var(--canvas);
   --foreground: var(--ink);
-  --card: #ffffff;
+  --card: var(--surface);
   --card-foreground: var(--ink);
-  --popover: #ffffff;
+  --popover: var(--surface);
   --popover-foreground: var(--ink);
   --primary: var(--navy);
   --primary-foreground: #ffffff;
@@ -65,6 +76,43 @@
   --radius: 0.5rem;
 }
 
+.dark {
+  --canvas: #0f1116;
+  --canvas-deep: #171a21;
+  --ink: #f4f4f6;
+  --muted: #989eaa;
+  --navy: #11131a;
+  --navy-soft: #20242f;
+  --teal: #a7aaf8;
+  --teal-strong: #c3c5ff;
+  --teal-soft: #272a48;
+  --lime: #d8ef83;
+  --lemon: #2b321d;
+  --sand: #292b32;
+  --line: #292d36;
+  --line-strong: #3a3f4b;
+  --surface: #181b22;
+  --surface-soft: #20242c;
+  --surface-raised: #21252e;
+  --lavender: #292842;
+  --sky: #202e3d;
+  --mint: #1d332d;
+  --peach: #352a23;
+  --chart-grid: #2b303a;
+  --chart-muted: #565d69;
+  --positive: #73c5a2;
+  --warning: #e3ad5d;
+  --danger: #e48686;
+  --background: var(--canvas);
+  --foreground: var(--ink);
+  --card: var(--surface);
+  --card-foreground: var(--ink);
+  --popover: var(--surface-raised);
+  --popover-foreground: var(--ink);
+  --border: var(--line);
+  --input: var(--line);
+}
+
 * {
   box-sizing: border-box;
 }
@@ -77,8 +125,8 @@ html {
 body {
   margin: 0;
   background: var(--canvas);
-  font-family: var(--font-nunito), Arial, sans-serif;
-  font-size: 16px;
+  font-family: var(--font-inter), Inter, Arial, sans-serif;
+  font-size: 15px;
   font-weight: 400;
   font-synthesis: none;
   color: var(--ink);
@@ -123,7 +171,7 @@ textarea,
 
 .atlas-field-label {
   display: block;
-  color: rgb(255 255 255 / 52%);
+  color: var(--muted);
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.1em;
@@ -132,23 +180,23 @@ textarea,
 
 .atlas-card {
   border: 1px solid var(--line);
-  border-radius: 12px;
+  border-radius: 20px;
   background: var(--surface);
-  box-shadow: 0 10px 34px rgb(18 47 56 / 5%);
+  box-shadow: 0 10px 32px rgb(24 27 37 / 4%);
 }
 
 .atlas-eyebrow {
   color: var(--teal);
   font-size: 11px;
-  font-weight: 800;
+  font-weight: 700;
   letter-spacing: 0.14em;
   text-transform: uppercase;
 }
 
 .atlas-section-title {
   margin-top: 7px;
-  font-size: clamp(1.4rem, 2.2vw, 1.85rem);
-  font-weight: 700;
+  font-size: clamp(1.25rem, 2vw, 1.6rem);
+  font-weight: 650;
   line-height: 1.12;
   letter-spacing: -0.035em;
 }
@@ -161,8 +209,8 @@ textarea,
 }
 
 .atlas-card-title {
-  font-size: 16px;
-  font-weight: 700;
+  font-size: 15px;
+  font-weight: 650;
   letter-spacing: -0.025em;
 }
 
@@ -182,21 +230,21 @@ textarea,
 }
 
 .atlas-page {
-  width: min(100%, 1480px);
+  width: min(100%, 1540px);
   margin-inline: auto;
   padding: 24px 16px 32px;
 }
 
 .atlas-page-heading {
-  font-size: clamp(1.75rem, 3vw, 2.5rem);
-  font-weight: 800;
-  line-height: 1.05;
-  letter-spacing: -0.055em;
+  font-size: clamp(1.65rem, 2.7vw, 2.35rem);
+  font-weight: 700;
+  line-height: 1.08;
+  letter-spacing: -0.045em;
 }
 
 .atlas-kpi-value {
   font-size: clamp(1.75rem, 7vw, 2.6rem);
-  font-weight: 800;
+  font-weight: 700;
   line-height: 1;
   letter-spacing: -0.05em;
 }
@@ -224,6 +272,10 @@ textarea,
 
 .atlas-chart-key i[data-tone='muted'] {
   background: #cfd4cc;
+}
+
+.atlas-chart-key i[data-tone='secondary'] {
+  background: color-mix(in srgb, var(--ink) 62%, transparent);
 }
 
 .chart-scroll {
@@ -321,8 +373,60 @@ textarea,
   }
 
   .atlas-card {
-    border-radius: 12px;
+    border-radius: 20px;
   }
+}
+
+.atlas-soft-card {
+  border: 1px solid color-mix(in srgb, var(--line) 76%, transparent);
+  border-radius: 20px;
+  background: var(--surface-soft);
+}
+
+.atlas-panel-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.atlas-metric-label {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+}
+
+.atlas-metric-value {
+  color: var(--ink);
+  font-size: clamp(1.75rem, 3vw, 2.25rem);
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: -0.05em;
+}
+
+.atlas-theme-transition,
+.atlas-theme-transition * {
+  transition-property: background-color, border-color, color, fill, stroke;
+  transition-duration: 180ms;
+  transition-timing-function: ease;
+}
+
+.dark .bg-white {
+  background-color: var(--surface) !important;
+}
+
+.dark .bg-\[\#fbfcf9\],
+.dark .bg-\[\#f8faf6\] {
+  background-color: var(--surface-soft) !important;
+}
+
+.dark .text-white {
+  color: #fff !important;
+}
+
+.dark .atlas-card {
+  box-shadow: 0 14px 42px rgb(0 0 0 / 18%);
 }
 
 @media (min-width: 1024px) {
