@@ -326,6 +326,28 @@ textarea,
   background-clip: padding-box;
 }
 
+@keyframes atlas-typing-cursor-blink {
+  0%,
+  45% {
+    opacity: 1;
+  }
+  55%,
+  100% {
+    opacity: 0;
+  }
+}
+
+.atlas-typing-cursor {
+  display: inline-block;
+  width: 2px;
+  height: 1.05em;
+  margin-left: 3px;
+  border-radius: 999px;
+  background: var(--teal);
+  vertical-align: -0.14em;
+  animation: atlas-typing-cursor-blink 900ms steps(1, end) infinite;
+}
+
 @keyframes atlas-mobile-menu-overlay-in {
   from {
     opacity: 0;

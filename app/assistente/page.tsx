@@ -120,17 +120,21 @@ function loadStoredMessages() {
   }
 }
 
-function waitForStreamFrame() {
-  const delay = window.matchMedia('(prefers-reduced-motion: reduce)').matches
-    ? 0
-    : 45;
-  return new Promise<void>((resolve) => window.setTimeout(resolve, delay));
+const STREAM_CHARACTERS_PER_FRAME = 2;
+const STREAM_FRAME_DELAY = 30;
+
+function waitForTypingFrame() {
+  return new Promise<void>((resolve) =>
+    window.setTimeout(resolve, STREAM_FRAME_DELAY),
+  );
 }
 
-function RichText({ text }: { text: string }) {
+function RichText({ text, typing = false }: { text: string; typing?: boolean }) {
+  const paragraphs = text.split('\n\n');
+
   return (
     <div className="space-y-3 text-sm leading-7">
-      {text.split('\n\n').map((paragraph, index) => (
+      {paragraphs.map((paragraph, index) => (
         <p key={index} className="whitespace-pre-line">
           {paragraph.split(/(\*\*.*?\*\*)/g).map((part, partIndex) =>
             part.startsWith('**') && part.endsWith('**') ? (
@@ -140,6 +144,9 @@ function RichText({ text }: { text: string }) {
             ) : (
               <Fragment key={partIndex}>{part}</Fragment>
             ),
+          )}
+          {typing && index === paragraphs.length - 1 && (
+            <span className="atlas-typing-cursor" aria-hidden="true" />
           )}
         </p>
       ))}
@@ -307,7 +314,11 @@ export default function AssistantPage() {
           return;
         }
 
-        receivedText += event.text;
+        const incomingCharacters = Array.from(event.text);
+        const reduceMotion = window.matchMedia(
+          '(prefers-reduced-motion: reduce)',
+        ).matches;
+
         if (!answerAdded) {
           answerAdded = true;
           setStreamingMessageId(assistantId);
@@ -316,22 +327,28 @@ export default function AssistantPage() {
             {
               id: assistantId,
               role: 'assistant',
-              text: receivedText,
+              text: '',
               mode: 'Consulta aos dados do Atlas',
               engine: 'mcp-langgraph',
             },
           ]);
-          await waitForStreamFrame();
-          return;
         }
-        setMessages((current) =>
-          current.map((message) =>
-            message.id === assistantId
-              ? { ...message, text: receivedText }
-              : message,
-          ),
-        );
-        await waitForStreamFrame();
+
+        const step = reduceMotion
+          ? incomingCharacters.length || 1
+          : STREAM_CHARACTERS_PER_FRAME;
+        for (let index = 0; index < incomingCharacters.length; index += step) {
+          if (controller.signal.aborted) return;
+          receivedText += incomingCharacters.slice(index, index + step).join('');
+          setMessages((current) =>
+            current.map((message) =>
+              message.id === assistantId
+                ? { ...message, text: receivedText }
+                : message,
+            ),
+          );
+          if (!reduceMotion) await waitForTypingFrame();
+        }
       });
 
       if (publicError || !answerAdded || !completed) {
@@ -469,7 +486,10 @@ export default function AssistantPage() {
                             : 'rounded-tl-md bg-[var(--surface-soft)]'
                         }`}
                       >
-                        <RichText text={message.text} />
+                        <RichText
+                          text={message.text}
+                          typing={message.id === streamingMessageId}
+                        />
                         {message.visualization && (
                           <div className="mt-4 min-w-0 rounded-xl border border-[var(--line)] bg-[var(--surface)] p-2 sm:p-3">
                             <MessageVisualization
