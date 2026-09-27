@@ -8,6 +8,7 @@ import {
   Construction,
   Database,
   HardDrive,
+  History,
   LaptopMinimal,
   RotateCcw,
   SendHorizontal,
@@ -77,6 +78,11 @@ function buildSuggestions(context: SchoolContext) {
       label: 'Recursos ausentes',
       question: 'Quais recursos não estão registrados nesta escola?',
       icon: LaptopMinimal,
+    },
+    {
+      label: 'Evolução histórica',
+      question: 'Como esta escola evoluiu entre os anos disponíveis?',
+      icon: History,
     },
     {
       label: 'Quem desenvolveu o Atlas?',
@@ -516,7 +522,7 @@ export default function AssistantPage() {
                       )}
                     </div>
                     {message.role === 'user' && (
-                      <div className="grid size-9 shrink-0 place-items-center rounded-full bg-[var(--navy)] text-[var(--surface)] sm:size-10">
+                      <div className="grid size-9 shrink-0 place-items-center rounded-full border border-[var(--primary-foreground)] bg-[var(--navy)] text-[var(--primary-foreground)] sm:size-10">
                         <UserRound size={17} />
                       </div>
                     )}
