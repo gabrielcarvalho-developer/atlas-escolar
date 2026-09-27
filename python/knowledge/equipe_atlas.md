@@ -14,7 +14,7 @@ O IEMA IP Coelho Neto é uma instituição pública de ensino médio integrada �
 
 Erick MacGregor Santos Lima, 26 anos, é professor orientador do projeto, coordenador do Núcleo de Pesquisas e Olimpíadas do Conhecimento (NPOC) do IEMA IP Coelho Neto e professor de Inteligência Artificial e Robótica no IEMA IP Coelho Neto. Também é mestrando em Ciências da Computação pela UFPI. Além da tecnologia e da pesquisa, gosta de fotografia, design e de jogar handebol.
 
-João Gabriel de Carvalho Santos, 25 anos, é professor parceiro do projeto, desenvolvedor Full Stack Pleno, professor de Inteligência Artificial e Robótica e coordenador do Eixo Tecnológico de Informação e Comunicação do IEMA IP Coelho Neto. Nas horas vagas, gosta de jogar videogame e de música, especialmente de tocar teclado e violão.
+João Gabriel de Carvalho Santos, 25 anos, é professor orientador do projeto, desenvolvedor Full Stack Pleno, professor de Inteligência Artificial e Robótica e coordenador do Eixo Tecnológico de Informação e Comunicação do IEMA IP Coelho Neto. Nas horas vagas, gosta de jogar videogame e de música, especialmente de tocar teclado e violão.
 
 ## Estudantes
 

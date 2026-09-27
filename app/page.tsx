@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { useState } from 'react';
 import {
   Accessibility,
   ArrowRight,
@@ -226,36 +227,105 @@ function HistoricalOverview({
   history: HistoricalPoint[];
   selectedYear: number;
 }) {
+  const [activeView, setActiveView] = useState<'performance' | 'infrastructure'>(
+    'performance',
+  );
+
   if (history.length < 2) return null;
-  const current = history.find((point) => point.year === selectedYear);
-  const previous = [...history].reverse().find((point) => point.year < selectedYear);
+  const firstYear = history.at(0)?.year;
+  const lastYear = history.at(-1)?.year;
+  const isPerformance = activeView === 'performance';
 
   return (
-    <section className="mt-5">
-      <div className="mb-4 flex items-end justify-between gap-4">
-        <div>
-          <p className="atlas-eyebrow">Série histórica</p>
-          <h2 className="atlas-section-title">Evolução entre os anos disponíveis</h2>
-        </div>
-        {current && previous && (
-          <p className="hidden items-center gap-1.5 text-xs text-[var(--muted)] sm:flex">
-            <span>{previous.year}</span>
-            <ArrowRight aria-hidden="true" size={14} strokeWidth={1.8} />
-            <span>{current.year}</span>
-          </p>
-        )}
-      </div>
+    <section className="mt-5" aria-labelledby="historical-overview-title">
+      <article className="atlas-card min-w-0 overflow-hidden">
+        <div className="p-5 pb-4 sm:p-6 sm:pb-5">
+          <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-start">
+            <div className="max-w-2xl">
+              <p className="atlas-eyebrow">Série histórica</p>
+              <h2 id="historical-overview-title" className="atlas-section-title">
+                Evolução dos indicadores
+              </h2>
+              <p className="atlas-section-copy">
+                Compare a mudança no desempenho e nas condições da rede sem
+                sobrepor informações diferentes.
+              </p>
+            </div>
 
-      <div className="grid gap-4 xl:grid-cols-2">
-        <article className="atlas-card min-w-0 p-5 sm:p-6">
-          <PanelHeader eyebrow="ENEM" title="Notas ao longo do tempo" />
-          <HistoricalPerformanceChart history={history} selectedYear={selectedYear} />
-        </article>
-        <article className="atlas-card min-w-0 p-5 sm:p-6">
-          <PanelHeader eyebrow="Infraestrutura" title="Condições ao longo do tempo" />
-          <HistoricalInfrastructureChart history={history} />
-        </article>
-      </div>
+            {firstYear && lastYear && (
+              <div className="inline-flex w-fit items-center gap-2 rounded-full bg-[var(--surface-soft)] px-3 py-2 text-xs font-medium tabular-nums text-[var(--muted)]">
+                <span>{firstYear}</span>
+                <ArrowRight aria-hidden="true" size={14} strokeWidth={1.8} />
+                <span>{lastYear}</span>
+              </div>
+            )}
+          </div>
+
+          <fieldset className="mt-5 grid w-full grid-cols-2 gap-1 rounded-xl border-0 bg-[var(--surface-soft)] p-1 sm:w-fit">
+            <legend className="sr-only">Indicador da série histórica</legend>
+            <button
+              type="button"
+              aria-pressed={isPerformance}
+              onClick={() => setActiveView('performance')}
+              className={`inline-flex min-h-10 items-center justify-center gap-2 rounded-lg px-4 text-xs font-semibold transition-colors sm:min-w-40 ${
+                isPerformance
+                  ? 'bg-[var(--surface)] text-[var(--ink)] shadow-sm'
+                  : 'text-[var(--muted)] hover:text-[var(--ink)]'
+              }`}
+            >
+              <ChartNoAxesCombined size={15} aria-hidden="true" />
+              Desempenho
+            </button>
+            <button
+              type="button"
+              aria-pressed={!isPerformance}
+              onClick={() => setActiveView('infrastructure')}
+              className={`inline-flex min-h-10 items-center justify-center gap-2 rounded-lg px-4 text-xs font-semibold transition-colors sm:min-w-40 ${
+                !isPerformance
+                  ? 'bg-[var(--surface)] text-[var(--ink)] shadow-sm'
+                  : 'text-[var(--muted)] hover:text-[var(--ink)]'
+              }`}
+            >
+              <Building2 size={15} aria-hidden="true" />
+              Infraestrutura
+            </button>
+          </fieldset>
+        </div>
+
+        <div className="border-t border-[var(--line)] px-3 pb-3 sm:px-5 sm:pb-5">
+          {isPerformance ? (
+            <div>
+              <div className="flex items-start justify-between gap-4 px-2 pt-5">
+                <div>
+                  <h3 className="atlas-card-title">Notas do ENEM por área</h3>
+                  <p className="atlas-card-copy">
+                    A legenda mostra a variação até o ano selecionado.
+                  </p>
+                </div>
+                <span className="hidden rounded-full border border-[var(--line)] px-3 py-1.5 text-[10px] text-[var(--muted)] sm:inline-flex">
+                  Pontuação
+                </span>
+              </div>
+              <HistoricalPerformanceChart history={history} selectedYear={selectedYear} />
+            </div>
+          ) : (
+            <div>
+              <div className="flex items-start justify-between gap-4 px-2 pt-5">
+                <div>
+                  <h3 className="atlas-card-title">Condições da rede</h3>
+                  <p className="atlas-card-copy">
+                    Percentual de escolas atendidas em cada dimensão.
+                  </p>
+                </div>
+                <span className="hidden rounded-full border border-[var(--line)] px-3 py-1.5 text-[10px] text-[var(--muted)] sm:inline-flex">
+                  % de escolas
+                </span>
+              </div>
+              <HistoricalInfrastructureChart history={history} />
+            </div>
+          )}
+        </div>
+      </article>
     </section>
   );
 }

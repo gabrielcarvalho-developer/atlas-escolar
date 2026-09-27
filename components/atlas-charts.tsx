@@ -1,22 +1,11 @@
 'use client';
 
-import type { ComponentProps } from 'react';
 import {
-  Bar,
-  BarChart,
-  CartesianGrid,
-  Line,
-  LineChart,
-  XAxis,
-  YAxis,
-} from 'recharts';
-import {
-  ChartConfig,
-  ChartContainer,
   ChartLegend,
-  ChartLegendContent,
-  ChartTooltip,
-  ChartTooltipContent,
+  type ChartLegendItem,
+  ChartConfig,
+  VisxBarChart,
+  VisxLineChart,
 } from '@/components/ui/chart';
 import {
   ENEM_AREA_KEYS,
@@ -45,58 +34,23 @@ export function InfrastructureChart({ context }: { context: SchoolContext }) {
   }));
 
   return (
-    <ChartContainer
+    <VisxBarChart
       config={infrastructureConfig}
+      data={data}
+      xKey="label"
+      series={[
+        { key: 'school' },
+        ...(context.compareMunicipal ? [{ key: 'municipality' }] : []),
+      ]}
+      domain={[0, 100]}
+      ticks={[0, 25, 50, 75, 100]}
+      tickFormat={(value) => `${value}%`}
+      accessibleLabel="Infraestrutura da escola comparada à média municipal"
       className="h-[270px] w-full sm:h-[310px]"
       initialDimension={{ width: 660, height: 310 }}
-    >
-      <BarChart
-        accessibilityLayer
-        data={data}
-        margin={{ top: 18, right: 0, left: -20, bottom: 10 }}
-        barGap={2}
-      >
-        <CartesianGrid vertical={false} stroke="var(--chart-grid)" />
-        <XAxis
-          dataKey="label"
-          tickLine={false}
-          axisLine={false}
-          interval={0}
-          tick={{ fontSize: 11, fill: 'var(--muted)' }}
-          dy={9}
-        />
-        <YAxis
-          domain={[0, 100]}
-          ticks={[0, 25, 50, 75, 100]}
-          tickFormatter={(value) => `${value}%`}
-          tickLine={false}
-          axisLine={false}
-          tick={{ fontSize: 11, fill: 'var(--muted)' }}
-        />
-        <ChartTooltip
-          cursor={{ fill: 'var(--surface-soft)' }}
-          content={<ChartTooltipContent indicator="dot" />}
-        />
-        <Bar
-          dataKey="school"
-          isAnimationActive={false}
-          name="school"
-          fill="var(--color-school)"
-          radius={[6, 6, 2, 2]}
-          maxBarSize={28}
-        />
-        {context.compareMunicipal && (
-          <Bar
-            dataKey="municipality"
-            isAnimationActive={false}
-            name="municipality"
-            fill="var(--color-municipality)"
-            radius={[6, 6, 2, 2]}
-            maxBarSize={28}
-          />
-        )}
-      </BarChart>
-    </ChartContainer>
+      maxBarSize={28}
+      barGap={2}
+    />
   );
 }
 
@@ -116,57 +70,22 @@ export function EnemPerformanceChart({ context }: { context: SchoolContext }) {
   }));
 
   return (
-    <ChartContainer
+    <VisxBarChart
       config={performanceConfig}
+      data={data}
+      xKey="label"
+      series={[
+        { key: 'school' },
+        ...(context.compareMunicipal ? [{ key: 'municipality' }] : []),
+      ]}
+      domain={[0, 1000]}
+      ticks={[0, 250, 500, 750, 1000]}
+      accessibleLabel="Desempenho da escola no ENEM comparado à média municipal"
       className="h-[270px] w-full sm:h-[310px]"
       initialDimension={{ width: 660, height: 310 }}
-    >
-      <BarChart
-        accessibilityLayer
-        data={data}
-        margin={{ top: 18, right: 0, left: -19, bottom: 10 }}
-        barGap={2}
-      >
-        <CartesianGrid vertical={false} stroke="var(--chart-grid)" />
-        <XAxis
-          dataKey="label"
-          tickLine={false}
-          axisLine={false}
-          interval={0}
-          tick={{ fontSize: 11, fill: 'var(--muted)' }}
-          dy={9}
-        />
-        <YAxis
-          domain={[0, 1000]}
-          ticks={[0, 250, 500, 750, 1000]}
-          tickLine={false}
-          axisLine={false}
-          tick={{ fontSize: 11, fill: 'var(--muted)' }}
-        />
-        <ChartTooltip
-          cursor={{ fill: 'var(--surface-soft)' }}
-          content={<ChartTooltipContent indicator="dot" />}
-        />
-        <Bar
-          dataKey="school"
-          isAnimationActive={false}
-          name="school"
-          fill="var(--color-school)"
-          radius={[6, 6, 2, 2]}
-          maxBarSize={28}
-        />
-        {context.compareMunicipal && (
-          <Bar
-            dataKey="municipality"
-            isAnimationActive={false}
-            name="municipality"
-            fill="var(--color-municipality)"
-            radius={[6, 6, 2, 2]}
-            maxBarSize={28}
-          />
-        )}
-      </BarChart>
-    </ChartContainer>
+      maxBarSize={28}
+      barGap={2}
+    />
   );
 }
 
@@ -193,58 +112,23 @@ export function TerritoryInfrastructureChart({
   }));
 
   return (
-    <ChartContainer
+    <VisxBarChart
       config={config}
+      data={data}
+      xKey="label"
+      series={[
+        { key: 'primary' },
+        ...(secondary ? [{ key: 'secondary' }] : []),
+      ]}
+      domain={[0, 100]}
+      ticks={[0, 25, 50, 75, 100]}
+      tickFormat={(value) => `${value}%`}
+      accessibleLabel="Comparação da infraestrutura dos territórios"
       className="h-[270px] w-full sm:h-[310px]"
       initialDimension={{ width: 660, height: 310 }}
-    >
-      <BarChart
-        accessibilityLayer
-        data={data}
-        margin={{ top: 18, right: 0, left: -20, bottom: 10 }}
-        barGap={3}
-      >
-        <CartesianGrid vertical={false} stroke="var(--chart-grid)" />
-        <XAxis
-          dataKey="label"
-          tickLine={false}
-          axisLine={false}
-          interval={0}
-          tick={{ fontSize: 11, fill: 'var(--muted)' }}
-          dy={9}
-        />
-        <YAxis
-          domain={[0, 100]}
-          ticks={[0, 25, 50, 75, 100]}
-          tickFormatter={(value) => `${value}%`}
-          tickLine={false}
-          axisLine={false}
-          tick={{ fontSize: 11, fill: 'var(--muted)' }}
-        />
-        <ChartTooltip
-          cursor={{ fill: 'var(--surface-soft)' }}
-          content={<ChartTooltipContent indicator="dot" />}
-        />
-        <Bar
-          dataKey="primary"
-          isAnimationActive={false}
-          name="primary"
-          fill="var(--color-primary)"
-          radius={[6, 6, 2, 2]}
-          maxBarSize={32}
-        />
-        {secondary && (
-          <Bar
-            dataKey="secondary"
-            isAnimationActive={false}
-            name="secondary"
-            fill="var(--color-secondary)"
-            radius={[6, 6, 2, 2]}
-            maxBarSize={32}
-          />
-        )}
-      </BarChart>
-    </ChartContainer>
+      maxBarSize={32}
+      barGap={3}
+    />
   );
 }
 
@@ -271,57 +155,22 @@ export function TerritoryPerformanceChart({
   }));
 
   return (
-    <ChartContainer
+    <VisxBarChart
       config={config}
+      data={data}
+      xKey="label"
+      series={[
+        { key: 'primary' },
+        ...(secondary ? [{ key: 'secondary' }] : []),
+      ]}
+      domain={[0, 1000]}
+      ticks={[0, 250, 500, 750, 1000]}
+      accessibleLabel="Comparação do desempenho no ENEM entre os territórios"
       className="h-[270px] w-full sm:h-[310px]"
       initialDimension={{ width: 660, height: 310 }}
-    >
-      <BarChart
-        accessibilityLayer
-        data={data}
-        margin={{ top: 18, right: 0, left: -19, bottom: 10 }}
-        barGap={3}
-      >
-        <CartesianGrid vertical={false} stroke="var(--chart-grid)" />
-        <XAxis
-          dataKey="label"
-          tickLine={false}
-          axisLine={false}
-          interval={0}
-          tick={{ fontSize: 11, fill: 'var(--muted)' }}
-          dy={9}
-        />
-        <YAxis
-          domain={[0, 1000]}
-          ticks={[0, 250, 500, 750, 1000]}
-          tickLine={false}
-          axisLine={false}
-          tick={{ fontSize: 11, fill: 'var(--muted)' }}
-        />
-        <ChartTooltip
-          cursor={{ fill: 'var(--surface-soft)' }}
-          content={<ChartTooltipContent indicator="dot" />}
-        />
-        <Bar
-          dataKey="primary"
-          isAnimationActive={false}
-          name="primary"
-          fill="var(--color-primary)"
-          radius={[6, 6, 2, 2]}
-          maxBarSize={32}
-        />
-        {secondary && (
-          <Bar
-            dataKey="secondary"
-            isAnimationActive={false}
-            name="secondary"
-            fill="var(--color-secondary)"
-            radius={[6, 6, 2, 2]}
-            maxBarSize={32}
-          />
-        )}
-      </BarChart>
-    </ChartContainer>
+      maxBarSize={32}
+      barGap={3}
+    />
   );
 }
 
@@ -342,55 +191,19 @@ export function SaebStateChart({ year }: { year: number }) {
   }));
 
   return (
-    <ChartContainer
+    <VisxBarChart
       config={saebConfig}
+      data={data}
+      xKey="label"
+      series={[{ key: 'portuguese' }, { key: 'mathematics' }]}
+      domain={[0, 400]}
+      ticks={[0, 100, 200, 300, 400]}
+      accessibleLabel={`Desempenho da rede estadual no SAEB em ${year}`}
       className="h-[270px] w-full sm:h-[300px]"
       initialDimension={{ width: 720, height: 300 }}
-    >
-      <BarChart
-        accessibilityLayer
-        data={data}
-        margin={{ top: 18, right: 0, left: -19, bottom: 10 }}
-        barGap={2}
-      >
-        <CartesianGrid vertical={false} stroke="var(--chart-grid)" />
-        <XAxis
-          dataKey="label"
-          tickLine={false}
-          axisLine={false}
-          interval={0}
-          tick={{ fontSize: 11, fill: 'var(--muted)' }}
-          dy={9}
-        />
-        <YAxis
-          domain={[0, 400]}
-          ticks={[0, 100, 200, 300, 400]}
-          tickLine={false}
-          axisLine={false}
-          tick={{ fontSize: 11, fill: 'var(--muted)' }}
-        />
-        <ChartTooltip
-          cursor={{ fill: 'var(--surface-soft)' }}
-          content={<ChartTooltipContent indicator="dot" />}
-        />
-        <Bar
-          dataKey="portuguese"
-          isAnimationActive={false}
-          name="portuguese"
-          fill="var(--color-portuguese)"
-          radius={[6, 6, 2, 2]}
-          maxBarSize={34}
-        />
-        <Bar
-          dataKey="mathematics"
-          isAnimationActive={false}
-          name="mathematics"
-          fill="var(--color-mathematics)"
-          radius={[6, 6, 2, 2]}
-          maxBarSize={34}
-        />
-      </BarChart>
-    </ChartContainer>
+      maxBarSize={34}
+      barGap={2}
+    />
   );
 }
 
@@ -461,15 +274,14 @@ function formatPerformanceDelta(delta: number | null) {
 }
 
 function HistoricalPerformanceLegend({
-  payload,
+  items,
   deltas,
   comparisonYears,
-}: ComponentProps<typeof ChartLegendContent> & {
+}: {
+  items: ChartLegendItem[];
   deltas: PerformanceDeltas;
   comparisonYears?: { previous: number; current: number };
 }) {
-  if (!payload?.length) return null;
-
   return (
     <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-2 pt-3 text-[10px]">
       {comparisonYears && (
@@ -477,34 +289,32 @@ function HistoricalPerformanceLegend({
           Variação {comparisonYears.previous} → {comparisonYears.current}
         </span>
       )}
-      {payload
-        .filter((item) => item.type !== 'none')
-        .map((item) => {
-          const key = String(item.dataKey ?? item.value) as EnemAreaKey;
-          const delta = deltas[key];
+      {items.map((item) => {
+        const key = item.key as EnemAreaKey;
+        const delta = deltas[key];
 
-          return (
-            <div key={key} className="flex items-center gap-1.5">
-              <span
-                aria-hidden="true"
-                className="size-2 shrink-0 rounded-[2px]"
-                style={{ backgroundColor: item.color }}
-              />
-              <span>{ENEM_AREA_SHORT_LABELS[key]}</span>
-              <span
-                className={`font-semibold tabular-nums ${
-                  delta === null || delta === 0
-                    ? 'text-[var(--muted)]'
-                    : delta > 0
-                      ? 'text-[var(--positive)]'
-                      : 'text-[var(--danger)]'
-                }`}
-              >
-                {formatPerformanceDelta(delta)}
-              </span>
-            </div>
-          );
-        })}
+        return (
+          <div key={key} className="flex items-center gap-1.5">
+            <span
+              aria-hidden="true"
+              className="size-2 shrink-0 rounded-[2px]"
+              style={{ backgroundColor: item.color }}
+            />
+            <span>{ENEM_AREA_SHORT_LABELS[key]}</span>
+            <span
+              className={`font-semibold tabular-nums ${
+                delta === null || delta === 0
+                  ? 'text-[var(--muted)]'
+                  : delta > 0
+                    ? 'text-[var(--positive)]'
+                    : 'text-[var(--danger)]'
+              }`}
+            >
+              {formatPerformanceDelta(delta)}
+            </span>
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -547,56 +357,29 @@ export function HistoricalPerformanceChart({
   ) as PerformanceDeltas;
 
   return (
-    <ChartContainer
+    <VisxLineChart
       config={historicalPerformanceConfig}
+      data={data}
+      xKey="year"
+      series={ENEM_AREA_KEYS.map((key) => ({ key }))}
+      domain={performanceScale.domain}
+      ticks={performanceScale.ticks}
+      accessibleLabel="Evolução histórica das notas do ENEM por área"
       className="h-[290px] w-full sm:h-[330px]"
       initialDimension={{ width: 720, height: 330 }}
-    >
-      <LineChart
-        data={data}
-        margin={{ top: 18, right: 12, left: -12, bottom: 8 }}
-      >
-        <CartesianGrid vertical={false} stroke="var(--chart-grid)" />
-        <XAxis
-          dataKey="year"
-          tickLine={false}
-          axisLine={{ stroke: 'var(--chart-grid)' }}
-          tickMargin={12}
-        />
-        <YAxis
-          domain={performanceScale.domain}
-          ticks={performanceScale.ticks}
-          tickLine={false}
-          axisLine={false}
-        />
-        <ChartTooltip content={<ChartTooltipContent indicator="line" />} />
-        <ChartLegend
-          content={
-            <HistoricalPerformanceLegend
-              deltas={deltas}
-              comparisonYears={
-                current && previous
-                  ? { previous: previous.year, current: current.year }
-                  : undefined
-              }
-            />
+      legendHeight={58}
+      legend={(items) => (
+        <HistoricalPerformanceLegend
+          items={items}
+          deltas={deltas}
+          comparisonYears={
+            current && previous
+              ? { previous: previous.year, current: current.year }
+              : undefined
           }
         />
-        {ENEM_AREA_KEYS.map((key) => (
-          <Line
-            key={key}
-            dataKey={key}
-            name={key}
-            type="monotone"
-            stroke={`var(--color-${key})`}
-            strokeWidth={2.25}
-            dot={{ r: 3, strokeWidth: 0 }}
-            activeDot={{ r: 5 }}
-            connectNulls={false}
-          />
-        ))}
-      </LineChart>
-    </ChartContainer>
+      )}
+    />
   );
 }
 
@@ -627,48 +410,24 @@ export function HistoricalInfrastructureChart({
   }));
 
   return (
-    <ChartContainer
+    <VisxLineChart
       config={historicalInfrastructureConfig}
+      data={data}
+      xKey="year"
+      series={INFRA_KEYS.map((key) => ({ key }))}
+      domain={[0, 100]}
+      ticks={[0, 25, 50, 75, 100]}
+      tickFormat={(value) => `${value}%`}
+      accessibleLabel="Evolução histórica da infraestrutura escolar"
       className="h-[290px] w-full sm:h-[330px]"
       initialDimension={{ width: 720, height: 330 }}
-    >
-      <LineChart
-        data={data}
-        margin={{ top: 18, right: 12, left: -12, bottom: 8 }}
-      >
-        <CartesianGrid vertical={false} stroke="var(--chart-grid)" />
-        <XAxis
-          dataKey="year"
-          tickLine={false}
-          axisLine={{ stroke: 'var(--chart-grid)' }}
-          tickMargin={12}
-        />
-        <YAxis
-          domain={[0, 100]}
-          ticks={[0, 25, 50, 75, 100]}
-          tickFormatter={(value) => `${value}%`}
-          tickLine={false}
-          axisLine={false}
-        />
-        <ChartTooltip content={<ChartTooltipContent indicator="line" />} />
+      legendHeight={42}
+      legend={(items) => (
         <ChartLegend
-          content={
-            <ChartLegendContent className="flex-wrap gap-x-3 gap-y-1 text-[10px]" />
-          }
+          items={items}
+          className="flex-wrap gap-x-3 gap-y-1 text-[10px]"
         />
-        {INFRA_KEYS.map((key) => (
-          <Line
-            key={key}
-            dataKey={key}
-            name={key}
-            type="monotone"
-            stroke={`var(--color-${key})`}
-            strokeWidth={2.25}
-            dot={{ r: 3, strokeWidth: 0 }}
-            activeDot={{ r: 5 }}
-          />
-        ))}
-      </LineChart>
-    </ChartContainer>
+      )}
+    />
   );
 }

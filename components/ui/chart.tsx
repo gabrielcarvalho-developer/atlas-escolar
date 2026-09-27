@@ -1,16 +1,19 @@
 'use client';
 
+import { AxisBottom, AxisLeft } from '@visx/axis';
+import { curveMonotoneX } from '@visx/curve';
+import { GridRows } from '@visx/grid';
+import { Group } from '@visx/group';
+import { scaleBand, scaleLinear, scalePoint } from '@visx/scale';
+import { BarRounded, LinePath } from '@visx/shape';
+import { useTooltip } from '@visx/tooltip';
 import * as React from 'react';
-import * as RechartsPrimitive from 'recharts';
-import type { TooltipValueType } from 'recharts';
 
 import { cn } from '@/lib/utils';
 
-// Format: { THEME_NAME: CSS_SELECTOR }
-const THEMES = { light: '', dark: '.dark' } as const;
-
-const INITIAL_DIMENSION = { width: 320, height: 200 } as const;
-type TooltipNameType = number | string;
+const DEFAULT_DIMENSION = { width: 320, height: 200 };
+const DEFAULT_MARGIN = { top: 18, right: 12, bottom: 38, left: 42 };
+const TOOLTIP_WIDTH = 192;
 
 export type ChartConfig = Record<
   string,
@@ -19,355 +22,658 @@ export type ChartConfig = Record<
     icon?: React.ComponentType;
   } & (
     | { color?: string; theme?: never }
-    | { color?: never; theme: Record<keyof typeof THEMES, string> }
+    | { color?: never; theme: { light: string; dark: string } }
   )
 >;
 
-type ChartContextProps = {
-  config: ChartConfig;
+export type ChartDatum = Record<string, string | number | null | undefined>;
+
+export type ChartSeries = {
+  key: string;
 };
 
-const ChartContext = React.createContext<ChartContextProps | null>(null);
+export type ChartLegendItem = {
+  key: string;
+  label: React.ReactNode;
+  color: string;
+  icon?: React.ComponentType;
+};
 
-function useChart() {
-  const context = React.useContext(ChartContext);
+type ChartMargin = {
+  top: number;
+  right: number;
+  bottom: number;
+  left: number;
+};
 
-  if (!context) {
-    throw new Error('useChart must be used within a <ChartContainer />');
-  }
+type ChartTooltipDatum = {
+  label: string;
+  items: Array<ChartLegendItem & { value: number }>;
+  index: number;
+};
 
-  return context;
+type SharedChartProps = {
+  config: ChartConfig;
+  data: ChartDatum[];
+  xKey: string;
+  series: ChartSeries[];
+  domain: [number, number];
+  ticks: number[];
+  className?: string;
+  initialDimension?: { width: number; height: number };
+  margin?: Partial<ChartMargin>;
+  tickFormat?: (value: number) => string;
+  accessibleLabel: string;
+};
+
+function getSeriesColor(config: ChartConfig, key: string) {
+  const item = config[key];
+  return item?.color ?? item?.theme?.light ?? 'currentColor';
 }
 
-function ChartContainer({
-  id,
-  className,
-  children,
-  config,
-  initialDimension = INITIAL_DIMENSION,
-  ...props
-}: React.ComponentProps<'div'> & {
-  config: ChartConfig;
-  children: React.ComponentProps<
-    typeof RechartsPrimitive.ResponsiveContainer
-  >['children'];
-  initialDimension?: {
-    width: number;
-    height: number;
+function getSeriesItems(config: ChartConfig, series: ChartSeries[]) {
+  return series.map(({ key }) => ({
+    key,
+    label: config[key]?.label ?? key,
+    color: getSeriesColor(config, key),
+    icon: config[key]?.icon,
+  }));
+}
+
+function getNumericValue(datum: ChartDatum, key: string) {
+  const value = datum[key];
+  return typeof value === 'number' && Number.isFinite(value)
+    ? value
+    : undefined;
+}
+
+function getLabel(datum: ChartDatum, key: string) {
+  const value = datum[key];
+  return value == null ? '' : String(value);
+}
+
+function formatCategoryTick(value: string, width: number) {
+  return width < 520 && value.length > 8 ? `${value.slice(0, 7)}…` : value;
+}
+
+function getTooltipData(
+  datum: ChartDatum,
+  index: number,
+  xKey: string,
+  items: ChartLegendItem[],
+): ChartTooltipDatum {
+  return {
+    label: getLabel(datum, xKey),
+    index,
+    items: items.flatMap((item) => {
+      const value = getNumericValue(datum, item.key);
+      return value === undefined ? [] : [{ ...item, value }];
+    }),
   };
+}
+
+function getAriaLabel(data: ChartTooltipDatum) {
+  const values = data.items
+    .map((item) => {
+      const label =
+        typeof item.label === 'string' || typeof item.label === 'number'
+          ? String(item.label)
+          : item.key;
+      return `${label}: ${item.value.toLocaleString('pt-BR')}`;
+    })
+    .join(', ');
+  return `${data.label}. ${values}`;
+}
+
+function mergeMargin(margin?: Partial<ChartMargin>): ChartMargin {
+  return { ...DEFAULT_MARGIN, ...margin };
+}
+
+function TooltipContent({
+  data,
+  indicator,
+}: {
+  data: ChartTooltipDatum;
+  indicator: 'dot' | 'line';
 }) {
-  const uniqueId = React.useId();
-  const chartId = `chart-${id ?? uniqueId.replace(/:/g, '')}`;
-
   return (
-    <ChartContext.Provider value={{ config }}>
-      <div
-        data-slot="chart"
-        data-chart={chartId}
-        className={cn(
-          "flex aspect-video justify-center text-xs [&_.recharts-cartesian-axis-tick_text]:fill-muted-foreground [&_.recharts-cartesian-grid_line[stroke='#ccc']]:stroke-border/50 [&_.recharts-curve.recharts-tooltip-cursor]:stroke-border [&_.recharts-dot[stroke='#fff']]:stroke-transparent [&_.recharts-layer]:outline-hidden [&_.recharts-polar-grid_[stroke='#ccc']]:stroke-border [&_.recharts-radial-bar-background-sector]:fill-muted [&_.recharts-rectangle.recharts-tooltip-cursor]:fill-muted [&_.recharts-reference-line_[stroke='#ccc']]:stroke-border [&_.recharts-sector]:outline-hidden [&_.recharts-sector[stroke='#fff']]:stroke-transparent [&_.recharts-surface]:outline-hidden",
-          className,
-        )}
-        {...props}
-      >
-        <ChartStyle id={chartId} config={config} />
-        <RechartsPrimitive.ResponsiveContainer
-          initialDimension={initialDimension}
-        >
-          {children}
-        </RechartsPrimitive.ResponsiveContainer>
-      </div>
-    </ChartContext.Provider>
-  );
-}
-
-const ChartStyle = ({ id, config }: { id: string; config: ChartConfig }) => {
-  const colorConfig = Object.entries(config).filter(
-    ([, config]) => config.theme ?? config.color,
-  );
-
-  if (!colorConfig.length) {
-    return null;
-  }
-
-  return (
-    <style
-      dangerouslySetInnerHTML={{
-        __html: Object.entries(THEMES)
-          .map(
-            ([theme, prefix]) => `
-${prefix} [data-chart=${id}] {
-${colorConfig
-  .map(([key, itemConfig]) => {
-    const color =
-      itemConfig.theme?.[theme as keyof typeof itemConfig.theme] ??
-      itemConfig.color;
-    return color ? `  --color-${key}: ${color};` : null;
-  })
-  .join('\n')}
-}
-`,
-          )
-          .join('\n'),
-      }}
-    />
-  );
-};
-
-const ChartTooltip = RechartsPrimitive.Tooltip;
-
-function ChartTooltipContent({
-  active,
-  payload,
-  className,
-  indicator = 'dot',
-  hideLabel = false,
-  hideIndicator = false,
-  label,
-  labelFormatter,
-  labelClassName,
-  formatter,
-  color,
-  nameKey,
-  labelKey,
-}: React.ComponentProps<typeof RechartsPrimitive.Tooltip> &
-  React.ComponentProps<'div'> & {
-    hideLabel?: boolean;
-    hideIndicator?: boolean;
-    indicator?: 'line' | 'dot' | 'dashed';
-    nameKey?: string;
-    labelKey?: string;
-  } & Omit<
-    RechartsPrimitive.DefaultTooltipContentProps<
-      TooltipValueType,
-      TooltipNameType
-    >,
-    'accessibilityLayer'
-  >) {
-  const { config } = useChart();
-
-  const tooltipLabel = React.useMemo(() => {
-    if (hideLabel || !payload?.length) {
-      return null;
-    }
-
-    const [item] = payload;
-    const key = `${labelKey ?? item?.dataKey ?? item?.name ?? 'value'}`;
-    const itemConfig = getPayloadConfigFromPayload(config, item, key);
-    const value =
-      !labelKey && typeof label === 'string'
-        ? (config[label]?.label ?? label)
-        : itemConfig?.label;
-
-    if (labelFormatter) {
-      return (
-        <div className={cn('font-medium', labelClassName)}>
-          {labelFormatter(value, payload)}
-        </div>
-      );
-    }
-
-    if (!value) {
-      return null;
-    }
-
-    return <div className={cn('font-medium', labelClassName)}>{value}</div>;
-  }, [
-    label,
-    labelFormatter,
-    payload,
-    hideLabel,
-    labelClassName,
-    config,
-    labelKey,
-  ]);
-
-  if (!active || !payload?.length) {
-    return null;
-  }
-
-  const nestLabel = payload.length === 1 && indicator !== 'dot';
-
-  return (
-    <div
-      className={cn(
-        'border-border/50 bg-background gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs shadow-xl grid min-w-48 items-start',
-        className,
-      )}
-    >
-      {!nestLabel ? tooltipLabel : null}
+    <div className="border-border/50 bg-background grid min-w-48 gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs shadow-xl">
+      <div className="font-medium">{data.label}</div>
       <div className="grid gap-1.5">
-        {payload
-          .filter((item) => item.type !== 'none')
-          .map((item, index) => {
-            const key = `${nameKey ?? item.name ?? item.dataKey ?? 'value'}`;
-            const itemConfig = getPayloadConfigFromPayload(config, item, key);
-            const indicatorColor = color ?? item.payload?.fill ?? item.color;
-
-            return (
-              <div
-                key={index}
+        {data.items.map((item) => (
+          <div key={item.key} className="flex items-center gap-2">
+            {item.icon ? (
+              <item.icon />
+            ) : (
+              <span
+                aria-hidden="true"
                 className={cn(
-                  'flex w-full flex-wrap items-stretch gap-2 [&>svg]:h-2.5 [&>svg]:w-2.5 [&>svg]:text-muted-foreground',
-                  indicator === 'dot' && 'items-center',
+                  'shrink-0 rounded-[2px]',
+                  indicator === 'dot' ? 'size-2.5' : 'h-3 w-1',
                 )}
-              >
-                {formatter && item?.value !== undefined && item.name ? (
-                  formatter(item.value, item.name, item, index, item.payload)
-                ) : (
-                  <>
-                    {itemConfig?.icon ? (
-                      <itemConfig.icon />
-                    ) : (
-                      !hideIndicator && (
-                        <div
-                          className={cn(
-                            'shrink-0 rounded-[2px] border-(--color-border) bg-(--color-bg)',
-                            {
-                              'h-2.5 w-2.5': indicator === 'dot',
-                              'w-1': indicator === 'line',
-                              'w-0 border-[1.5px] border-dashed bg-transparent':
-                                indicator === 'dashed',
-                              'my-0.5': nestLabel && indicator === 'dashed',
-                            },
-                          )}
-                          style={
-                            {
-                              '--color-bg': indicatorColor,
-                              '--color-border': indicatorColor,
-                            } as React.CSSProperties
-                          }
-                        />
-                      )
-                    )}
-                    <div
-                      className={cn(
-                        'grid flex-1 grid-cols-[minmax(0,1fr)_auto] gap-x-8 leading-none',
-                        nestLabel ? 'items-end' : 'items-center',
-                      )}
-                    >
-                      <div className="grid gap-1.5">
-                        {nestLabel ? tooltipLabel : null}
-                        <span className="text-muted-foreground">
-                          {itemConfig?.label ?? item.name}
-                        </span>
-                      </div>
-                      {item.value != null && (
-                        <span className="font-mono font-medium text-foreground tabular-nums whitespace-nowrap">
-                          {typeof item.value === 'number'
-                            ? item.value.toLocaleString()
-                            : String(item.value)}
-                        </span>
-                      )}
-                    </div>
-                  </>
-                )}
-              </div>
-            );
-          })}
+                style={{ backgroundColor: item.color }}
+              />
+            )}
+            <span className="text-muted-foreground min-w-0 flex-1">
+              {item.label}
+            </span>
+            <span className="text-foreground font-mono font-medium whitespace-nowrap tabular-nums">
+              {item.value.toLocaleString('pt-BR')}
+            </span>
+          </div>
+        ))}
       </div>
     </div>
   );
 }
 
-const ChartLegend = RechartsPrimitive.Legend;
+function ChartTooltip({
+  data,
+  left,
+  top,
+  width,
+  indicator,
+}: {
+  data?: ChartTooltipDatum;
+  left?: number;
+  top?: number;
+  width: number;
+  indicator: 'dot' | 'line';
+}) {
+  if (!data || left === undefined || top === undefined) return null;
 
-function ChartLegendContent({
-  className,
-  hideIcon = false,
-  payload,
-  verticalAlign = 'bottom',
-  nameKey,
-}: React.ComponentProps<'div'> & {
-  hideIcon?: boolean;
-  nameKey?: string;
-} & RechartsPrimitive.DefaultLegendContentProps) {
-  const { config } = useChart();
-
-  if (!payload?.length) {
-    return null;
-  }
+  const boundedLeft = Math.max(
+    8,
+    Math.min(left - TOOLTIP_WIDTH / 2, width - TOOLTIP_WIDTH - 8),
+  );
+  const placeBelow = top < 88;
+  const boundedTop = placeBelow ? top + 12 : top - 12;
 
   return (
     <div
-      className={cn(
-        'flex items-center justify-center gap-4',
-        verticalAlign === 'top' ? 'pb-3' : 'pt-3',
-        className,
-      )}
+      className="pointer-events-none absolute z-20"
+      style={{
+        left: boundedLeft,
+        top: boundedTop,
+        transform: placeBelow ? undefined : 'translateY(-100%)',
+      }}
     >
-      {payload
-        .filter((item) => item.type !== 'none')
-        .map((item, index) => {
-          const key = `${nameKey ?? item.dataKey ?? 'value'}`;
-          const itemConfig = getPayloadConfigFromPayload(config, item, key);
-
-          return (
-            <div
-              key={index}
-              className={cn(
-                'flex items-center gap-1.5 [&>svg]:h-3 [&>svg]:w-3 [&>svg]:text-muted-foreground',
-              )}
-            >
-              {itemConfig?.icon && !hideIcon ? (
-                <itemConfig.icon />
-              ) : (
-                <div
-                  className="h-2 w-2 shrink-0 rounded-[2px]"
-                  style={{
-                    backgroundColor: item.color,
-                  }}
-                />
-              )}
-              {itemConfig?.label}
-            </div>
-          );
-        })}
+      <TooltipContent data={data} indicator={indicator} />
     </div>
   );
 }
 
-function getPayloadConfigFromPayload(
-  config: ChartConfig,
-  payload: unknown,
-  key: string,
-) {
-  if (typeof payload !== 'object' || payload === null) {
-    return undefined;
-  }
+function ChartFrame({
+  className,
+  initialDimension = DEFAULT_DIMENSION,
+  children,
+}: {
+  className?: string;
+  initialDimension?: { width: number; height: number };
+  children: (size: { width: number; height: number }) => React.ReactNode;
+}) {
+  const containerRef = React.useRef<HTMLDivElement>(null);
+  const [size, setSize] = React.useState(initialDimension);
 
-  const payloadPayload =
-    'payload' in payload &&
-    typeof payload.payload === 'object' &&
-    payload.payload !== null
-      ? payload.payload
-      : undefined;
+  React.useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
 
-  let configLabelKey: string = key;
+    const updateSize = (width: number, height: number) => {
+      if (width <= 0 || height <= 0) return;
+      setSize((current) =>
+        current.width === width && current.height === height
+          ? current
+          : { width, height },
+      );
+    };
+    const bounds = container.getBoundingClientRect();
+    updateSize(bounds.width, bounds.height);
 
-  if (
-    key in payload &&
-    typeof payload[key as keyof typeof payload] === 'string'
-  ) {
-    configLabelKey = payload[key as keyof typeof payload] as string;
-  } else if (
-    payloadPayload &&
-    key in payloadPayload &&
-    typeof payloadPayload[key as keyof typeof payloadPayload] === 'string'
-  ) {
-    configLabelKey = payloadPayload[
-      key as keyof typeof payloadPayload
-    ] as string;
-  }
+    const observer = new ResizeObserver(([entry]) => {
+      if (!entry) return;
+      updateSize(entry.contentRect.width, entry.contentRect.height);
+    });
+    observer.observe(container);
 
-  return configLabelKey in config ? config[configLabelKey] : config[key];
+    return () => observer.disconnect();
+  }, []);
+
+  return (
+    <div
+      ref={containerRef}
+      data-slot="chart"
+      className={cn('relative min-w-0 aspect-video text-xs', className)}
+    >
+      {children(size)}
+    </div>
+  );
 }
 
-export {
-  ChartContainer,
-  ChartTooltip,
-  ChartTooltipContent,
-  ChartLegend,
-  ChartLegendContent,
-  ChartStyle,
+const axisTickLabelProps = {
+  fill: 'var(--muted)',
+  fontSize: 11,
 };
+
+export function ChartLegend({
+  items,
+  className,
+}: {
+  items: ChartLegendItem[];
+  className?: string;
+}) {
+  return (
+    <div
+      className={cn('flex items-center justify-center gap-4 pt-3', className)}
+    >
+      {items.map((item) => (
+        <div key={item.key} className="flex items-center gap-1.5">
+          {item.icon ? (
+            <item.icon />
+          ) : (
+            <span
+              aria-hidden="true"
+              className="size-2 shrink-0 rounded-[2px]"
+              style={{ backgroundColor: item.color }}
+            />
+          )}
+          {item.label}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+export function VisxBarChart({
+  config,
+  data,
+  xKey,
+  series,
+  domain,
+  ticks,
+  className,
+  initialDimension,
+  margin: marginOverride,
+  tickFormat = String,
+  accessibleLabel,
+  barGap = 2,
+  maxBarSize = 32,
+}: SharedChartProps & {
+  barGap?: number;
+  maxBarSize?: number;
+}) {
+  const margin = mergeMargin(marginOverride);
+  const seriesItems = getSeriesItems(config, series);
+  const {
+    tooltipData,
+    tooltipLeft,
+    tooltipTop,
+    tooltipOpen,
+    showTooltip,
+    hideTooltip,
+  } = useTooltip<ChartTooltipDatum>();
+
+  return (
+    <ChartFrame className={className} initialDimension={initialDimension}>
+      {({ width, height }) => {
+        const innerWidth = Math.max(0, width - margin.left - margin.right);
+        const innerHeight = Math.max(0, height - margin.top - margin.bottom);
+        const labels = data.map((datum) => getLabel(datum, xKey));
+        const xScale = scaleBand<string>({
+          domain: labels,
+          range: [0, innerWidth],
+          padding: 0.18,
+        });
+        const seriesScale = scaleBand<string>({
+          domain: series.map(({ key }) => key),
+          range: [0, xScale.bandwidth()],
+          paddingInner:
+            xScale.bandwidth() > 0 ? barGap / xScale.bandwidth() : 0,
+        });
+        const yScale = scaleLinear<number>({
+          domain,
+          range: [innerHeight, 0],
+          nice: false,
+        });
+
+        const showDatumTooltip = (datum: ChartDatum, index: number) => {
+          const label = getLabel(datum, xKey);
+          const x = (xScale(label) ?? 0) + xScale.bandwidth() / 2;
+          const values = series
+            .map(({ key }) => getNumericValue(datum, key))
+            .filter((value): value is number => value !== undefined);
+          const highestValue = values.length ? Math.max(...values) : domain[0];
+
+          showTooltip({
+            tooltipData: getTooltipData(datum, index, xKey, seriesItems),
+            tooltipLeft: margin.left + x,
+            tooltipTop: margin.top + yScale(highestValue),
+          });
+        };
+
+        return (
+          <>
+            <svg
+              width={width}
+              height={height}
+              aria-label={accessibleLabel}
+              className="block overflow-visible"
+            >
+              <Group left={margin.left} top={margin.top}>
+                <GridRows
+                  scale={yScale}
+                  width={innerWidth}
+                  tickValues={ticks}
+                  stroke="var(--chart-grid)"
+                />
+                {tooltipOpen && tooltipData && (
+                  <rect
+                    aria-hidden="true"
+                    x={xScale(labels[tooltipData.index]) ?? 0}
+                    width={xScale.bandwidth()}
+                    height={innerHeight}
+                    fill="var(--surface-soft)"
+                  />
+                )}
+                {data.flatMap((datum) => {
+                  const label = getLabel(datum, xKey);
+                  const categoryX = xScale(label) ?? 0;
+
+                  return series.flatMap(({ key }) => {
+                    const value = getNumericValue(datum, key);
+                    const seriesX = seriesScale(key);
+                    if (value === undefined || seriesX === undefined) return [];
+
+                    const availableWidth = seriesScale.bandwidth();
+                    const barWidth = Math.min(availableWidth, maxBarSize);
+                    const y = yScale(value);
+
+                    return (
+                      <BarRounded
+                        key={`${label}-${key}`}
+                        x={
+                          categoryX + seriesX + (availableWidth - barWidth) / 2
+                        }
+                        y={y}
+                        width={barWidth}
+                        height={Math.max(0, innerHeight - y)}
+                        radius={6}
+                        top
+                        fill={getSeriesColor(config, key)}
+                      />
+                    );
+                  });
+                })}
+                {data.map((datum, index) => {
+                  const label = getLabel(datum, xKey);
+                  const tooltipDatum = getTooltipData(
+                    datum,
+                    index,
+                    xKey,
+                    seriesItems,
+                  );
+
+                  return (
+                    <rect
+                      key={`hit-${label}`}
+                      x={xScale(label) ?? 0}
+                      width={xScale.bandwidth()}
+                      height={innerHeight}
+                      fill="transparent"
+                      tabIndex={0}
+                      role="graphics-symbol"
+                      aria-label={getAriaLabel(tooltipDatum)}
+                      className="outline-none"
+                      onPointerMove={() => showDatumTooltip(datum, index)}
+                      onPointerLeave={hideTooltip}
+                      onFocus={() => showDatumTooltip(datum, index)}
+                      onBlur={hideTooltip}
+                    />
+                  );
+                })}
+                <AxisBottom
+                  scale={xScale}
+                  top={innerHeight}
+                  hideAxisLine
+                  hideTicks
+                  tickFormat={(value) =>
+                    formatCategoryTick(String(value), innerWidth)
+                  }
+                  tickLabelProps={(_, index) => ({
+                    ...axisTickLabelProps,
+                    fontSize: innerWidth < 400 ? 9 : 11,
+                    textAnchor: index === labels.length - 1 ? 'end' : 'middle',
+                    dy: 9,
+                  })}
+                />
+                <AxisLeft
+                  scale={yScale}
+                  tickValues={ticks}
+                  tickFormat={(value) => tickFormat(Number(value))}
+                  hideAxisLine
+                  hideTicks
+                  tickLabelProps={() => ({
+                    ...axisTickLabelProps,
+                    textAnchor: 'end',
+                    dx: -4,
+                    dy: 3,
+                  })}
+                />
+              </Group>
+            </svg>
+            {tooltipOpen && (
+              <ChartTooltip
+                data={tooltipData}
+                left={tooltipLeft}
+                top={tooltipTop}
+                width={width}
+                indicator="dot"
+              />
+            )}
+          </>
+        );
+      }}
+    </ChartFrame>
+  );
+}
+
+export function VisxLineChart({
+  config,
+  data,
+  xKey,
+  series,
+  domain,
+  ticks,
+  className,
+  initialDimension,
+  margin: marginOverride,
+  tickFormat = String,
+  accessibleLabel,
+  legend,
+  legendHeight = 42,
+}: SharedChartProps & {
+  legend?: (items: ChartLegendItem[]) => React.ReactNode;
+  legendHeight?: number;
+}) {
+  const margin = mergeMargin(marginOverride);
+  const seriesItems = getSeriesItems(config, series);
+  const {
+    tooltipData,
+    tooltipLeft,
+    tooltipTop,
+    tooltipOpen,
+    showTooltip,
+    hideTooltip,
+  } = useTooltip<ChartTooltipDatum>();
+
+  return (
+    <ChartFrame className={className} initialDimension={initialDimension}>
+      {({ width, height }) => {
+        const svgHeight = Math.max(0, height - (legend ? legendHeight : 0));
+        const innerWidth = Math.max(0, width - margin.left - margin.right);
+        const innerHeight = Math.max(0, svgHeight - margin.top - margin.bottom);
+        const labels = data.map((datum) => getLabel(datum, xKey));
+        const xScale = scalePoint<string>({
+          domain: labels,
+          range: [0, innerWidth],
+          padding: 0.25,
+        });
+        const yScale = scaleLinear<number>({
+          domain,
+          range: [innerHeight, 0],
+          nice: false,
+        });
+        const step = xScale.step();
+
+        const showDatumTooltip = (datum: ChartDatum, index: number) => {
+          const label = getLabel(datum, xKey);
+          const x = xScale(label) ?? 0;
+          const values = series
+            .map(({ key }) => getNumericValue(datum, key))
+            .filter((value): value is number => value !== undefined);
+          const highestValue = values.length ? Math.max(...values) : domain[0];
+
+          showTooltip({
+            tooltipData: getTooltipData(datum, index, xKey, seriesItems),
+            tooltipLeft: margin.left + x,
+            tooltipTop: margin.top + yScale(highestValue),
+          });
+        };
+
+        return (
+          <>
+            <svg
+              width={width}
+              height={svgHeight}
+              aria-label={accessibleLabel}
+              className="block overflow-visible"
+            >
+              <Group left={margin.left} top={margin.top}>
+                <GridRows
+                  scale={yScale}
+                  width={innerWidth}
+                  tickValues={ticks}
+                  stroke="var(--chart-grid)"
+                />
+                {tooltipOpen && tooltipData && (
+                  <line
+                    aria-hidden="true"
+                    x1={xScale(labels[tooltipData.index]) ?? 0}
+                    x2={xScale(labels[tooltipData.index]) ?? 0}
+                    y1={0}
+                    y2={innerHeight}
+                    stroke="var(--chart-grid)"
+                  />
+                )}
+                {series.map(({ key }) => (
+                  <React.Fragment key={key}>
+                    <LinePath<ChartDatum>
+                      data={data}
+                      x={(datum) => xScale(getLabel(datum, xKey)) ?? 0}
+                      y={(datum) => yScale(getNumericValue(datum, key) ?? 0)}
+                      defined={(datum) =>
+                        getNumericValue(datum, key) !== undefined
+                      }
+                      curve={curveMonotoneX}
+                      stroke={getSeriesColor(config, key)}
+                      strokeWidth={2.25}
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      fill="none"
+                    />
+                    {data.map((datum, index) => {
+                      const value = getNumericValue(datum, key);
+                      if (value === undefined) return null;
+                      const isActive =
+                        tooltipOpen && tooltipData?.index === index;
+
+                      return (
+                        <circle
+                          key={`${getLabel(datum, xKey)}-${key}`}
+                          cx={xScale(getLabel(datum, xKey)) ?? 0}
+                          cy={yScale(value)}
+                          r={isActive ? 5 : 3}
+                          fill={getSeriesColor(config, key)}
+                        />
+                      );
+                    })}
+                  </React.Fragment>
+                ))}
+                {data.map((datum, index) => {
+                  const label = getLabel(datum, xKey);
+                  const center = xScale(label) ?? 0;
+                  const hitWidth = Math.max(step, 24);
+                  const tooltipDatum = getTooltipData(
+                    datum,
+                    index,
+                    xKey,
+                    seriesItems,
+                  );
+
+                  return (
+                    <rect
+                      key={`hit-${label}`}
+                      x={center - hitWidth / 2}
+                      width={hitWidth}
+                      height={innerHeight}
+                      fill="transparent"
+                      tabIndex={0}
+                      role="graphics-symbol"
+                      aria-label={getAriaLabel(tooltipDatum)}
+                      className="outline-none"
+                      onPointerMove={() => showDatumTooltip(datum, index)}
+                      onPointerLeave={hideTooltip}
+                      onFocus={() => showDatumTooltip(datum, index)}
+                      onBlur={hideTooltip}
+                    />
+                  );
+                })}
+                <AxisBottom
+                  scale={xScale}
+                  top={innerHeight}
+                  stroke="var(--chart-grid)"
+                  hideTicks
+                  tickLabelProps={() => ({
+                    ...axisTickLabelProps,
+                    textAnchor: 'middle',
+                    dy: 10,
+                  })}
+                />
+                <AxisLeft
+                  scale={yScale}
+                  tickValues={ticks}
+                  tickFormat={(value) => tickFormat(Number(value))}
+                  hideAxisLine
+                  hideTicks
+                  tickLabelProps={() => ({
+                    ...axisTickLabelProps,
+                    textAnchor: 'end',
+                    dx: -4,
+                    dy: 3,
+                  })}
+                />
+              </Group>
+            </svg>
+            {legend && (
+              <div
+                className="absolute inset-x-0 bottom-0"
+                style={{ height: legendHeight }}
+              >
+                {legend(seriesItems)}
+              </div>
+            )}
+            {tooltipOpen && (
+              <ChartTooltip
+                data={tooltipData}
+                left={tooltipLeft}
+                top={tooltipTop}
+                width={width}
+                indicator="line"
+              />
+            )}
+          </>
+        );
+      }}
+    </ChartFrame>
+  );
+}

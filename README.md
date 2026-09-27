@@ -1,6 +1,6 @@
 # Atlas Escolar — Next.js
 
-Aplicação em Next.js 16, TypeScript, Tailwind CSS e Recharts. A execução e a publicação usam Vinext/Cloudflare Workers para manter o assistente no servidor sem expor credenciais do modelo.
+Aplicação em Next.js 16, TypeScript, Tailwind CSS e Visx. A execução e a publicação usam Vinext/Cloudflare Workers para manter o assistente no servidor sem expor credenciais do modelo.
 
 ## Dados reais
 
