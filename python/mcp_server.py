@@ -58,46 +58,57 @@ def _audit(tool_name: str, arguments: dict[str, object], result: dict[str, objec
 
 
 @mcp.tool()
-def get_school_profile(school_code: str) -> dict[str, object]:
-    """Retorna infraestrutura, desempenho ENEM, recursos e fonte de uma escola.
+def get_school_profile(school_code: str, year: int | None = None) -> dict[str, object]:
+    """Retorna infraestrutura, desempenho, recursos e série histórica de uma escola.
 
     Args:
         school_code: Codigo INEP da escola, por exemplo ``21288780``.
+        year: Ano Censo/ENEM opcional; sem ele, usa o ano mais recente.
     """
-    result = get_school_profile_data(school_code)
-    _audit("get_school_profile", {"school_code": school_code}, result)
+    result = get_school_profile_data(school_code, year)
+    _audit("get_school_profile", {"school_code": school_code, "year": year}, result)
     return result
 
 
 @mcp.tool()
-def get_municipality_metrics(municipality_name: str) -> dict[str, object]:
-    """Retorna metricas agregadas de um municipio do Maranhao.
+def get_municipality_metrics(
+    municipality_name: str, year: int | None = None
+) -> dict[str, object]:
+    """Retorna metricas agregadas e série histórica de um municipio do Maranhao.
 
     Args:
         municipality_name: Nome completo do municipio, por exemplo ``Sao Luis``.
+        year: Ano Censo/ENEM opcional; sem ele, usa o ano mais recente.
     """
-    result = get_municipality_metrics_data(municipality_name)
-    _audit("get_municipality_metrics", {"municipality_name": municipality_name}, result)
+    result = get_municipality_metrics_data(municipality_name, year)
+    _audit(
+        "get_municipality_metrics",
+        {"municipality_name": municipality_name, "year": year},
+        result,
+    )
     return result
 
 
 @mcp.tool()
-def get_state_metrics() -> dict[str, object]:
-    """Retorna metricas consolidadas do estado do Maranhao."""
-    result = get_state_metrics_data()
-    _audit("get_state_metrics", {}, result)
+def get_state_metrics(year: int | None = None) -> dict[str, object]:
+    """Retorna metricas e série histórica consolidadas do estado do Maranhao."""
+    result = get_state_metrics_data(year)
+    _audit("get_state_metrics", {"year": year}, result)
     return result
 
 
 @mcp.tool()
-def compare_schools(school_codes: list[str]) -> dict[str, object]:
+def compare_schools(
+    school_codes: list[str], year: int | None = None
+) -> dict[str, object]:
     """Compara de duas a cinco escolas pelos seus codigos INEP.
 
     Args:
         school_codes: Lista com dois a cinco codigos INEP.
+        year: Ano Censo/ENEM opcional; sem ele, usa o ano mais recente.
     """
-    result = compare_schools_data(school_codes)
-    _audit("compare_schools", {"school_codes": school_codes}, result)
+    result = compare_schools_data(school_codes, year)
+    _audit("compare_schools", {"school_codes": school_codes, "year": year}, result)
     return result
 
 
@@ -107,6 +118,7 @@ def search_schools(
     state: str | None = None,
     municipality: str | None = None,
     limit: int = 10,
+    year: int | None = None,
 ) -> dict[str, object]:
     """Busca escolas por nome e filtros territoriais opcionais.
 
@@ -115,9 +127,10 @@ def search_schools(
         state: UF opcional; o conjunto atual usa MA.
         municipality: Nome ou parte do nome do municipio.
         limit: Quantidade maxima de resultados, de 1 a 25.
+        year: Ano Censo/ENEM opcional; sem ele, usa o ano mais recente.
     """
     safe_limit = min(max(limit, 1), 25)
-    result = search_schools_data(query, state, municipality, safe_limit)
+    result = search_schools_data(query, state, municipality, safe_limit, year)
     _audit(
         "search_schools",
         {
@@ -125,6 +138,7 @@ def search_schools(
             "state": state,
             "municipality": municipality,
             "limit": safe_limit,
+            "year": year,
         },
         result,
     )
@@ -136,6 +150,7 @@ def calculate_enem_statistics(
     area: Literal["cn", "ch", "lc", "mt", "essay"],
     scope: Literal["state", "municipality"] = "state",
     municipality_name: str | None = None,
+    year: int | None = None,
 ) -> dict[str, object]:
     """Calcula estatisticas do ENEM por area e escopo.
 
@@ -143,21 +158,27 @@ def calculate_enem_statistics(
         area: Area do ENEM: cn, ch, lc, mt ou essay.
         scope: Escopo estadual ou municipal.
         municipality_name: Obrigatorio quando o escopo for municipal.
+        year: Ano ENEM opcional; sem ele, usa o ano mais recente.
     """
-    result = calculate_enem_statistics_data(area, scope, municipality_name)
+    result = calculate_enem_statistics_data(area, scope, municipality_name, year)
     _audit(
         "calculate_enem_statistics",
-        {"area": area, "scope": scope, "municipality_name": municipality_name},
+        {
+            "area": area,
+            "scope": scope,
+            "municipality_name": municipality_name,
+            "year": year,
+        },
         result,
     )
     return result
 
 
 @mcp.tool()
-def get_saeb_state_context() -> dict[str, object]:
+def get_saeb_state_context(year: int | None = None) -> dict[str, object]:
     """Retorna resultados SAEB disponiveis e suas limitacoes de granularidade."""
-    result = get_saeb_state_context_data()
-    _audit("get_saeb_state_context", {}, result)
+    result = get_saeb_state_context_data(year)
+    _audit("get_saeb_state_context", {"year": year}, result)
     return result
 
 

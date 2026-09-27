@@ -19,11 +19,11 @@ data/incoming/
     └── README_Entrega_Dados_ATLAS_Escolar.md
 ```
 
-`npm run data:build` valida hash SHA-256, BOM UTF-8, cabeçalhos, tipos, chaves, nulos, fórmulas, vínculo municipal e totais de aceite. Em seguida, gera os artefatos consumidos pelo site em `lib/generated/` e o manifesto público em `public/data/manifest.json`.
+`npm run data:build` descobre automaticamente os anos pelos nomes dos arquivos, valida hash SHA-256 das entregas documentadas, BOM UTF-8, cabeçalhos, tipos, chaves, fórmulas e vínculo municipal. Em seguida, gera os artefatos multi-ano consumidos pelo site em `lib/generated/` e o manifesto público em `public/data/manifest.json`.
 
 Critérios de aceite atuais: 10.080 escolas públicas, 217 municípios, 925 escolas públicas com Ensino Médio, 821 escolas do ENEM, 711 vinculadas ao Censo, 110 não vinculadas, 60.992 registros do ENEM e 30 linhas de contexto SAEB.
 
-Ao substituir uma entrega, preserve os nomes dos arquivos e atualize o dicionário JSON com os novos hashes, esquemas, contagens e regras. O build falha se os dados divergirem da documentação.
+Para adicionar um ano, inclua em `data/incoming/bases/` o trio Censo/ENEM com o sufixo `_AAAA.csv`; bases SAEB usam `saeb_contexto_estadual_ma_AAAA.csv` e podem ser incluídas de forma independente. O esquema deve permanecer igual ao da família. Veja o [guia de bases multi-ano](data/incoming/documentacao/GUIA_BASES_MULTIANO.md).
 
 ## Assistente via MCP
 
@@ -83,7 +83,9 @@ npm run check:agent
 
 - filtros por código oficial de estado, município e escola;
 - comparação com agregados municipais;
-- infraestrutura, ENEM 2025 e contexto estadual SAEB 2023;
+- infraestrutura e ENEM filtráveis por ano, com séries históricas automáticas;
+- contexto estadual SAEB com seletor próprio de anos disponíveis;
+- comparação temporal de notas e infraestrutura em escola, município e estado;
 - assistente LangGraph com acesso exclusivo às ferramentas de dados via MCP;
 - plano de ação e relatório PDF baseados no contexto selecionado;
 - ferramenta WebMCP para selecionar a escola por `CO_ESCOLA`.

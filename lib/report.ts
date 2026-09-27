@@ -177,7 +177,7 @@ export function buildReport(context: SchoolContext) {
     const { line, text } = drawing;
     line(42, 54, 553, 54, COLORS.line, 0.7);
     text(
-      'Censo Escolar 2025  |  ENEM 2025  |  SAEB 2023',
+      `Censo Escolar ${context.school.year}  |  ENEM ${context.school.year}  |  SAEB estadual`,
       42,
       34,
       7.5,
@@ -196,20 +196,18 @@ export function buildReport(context: SchoolContext) {
     text('A', 52.5, 800, 12, COLORS.navy, true);
     text('Atlas', 82, 805, 13, COLORS.white, true);
     text('INTELIGÊNCIA EDUCACIONAL', 82, 793, 6.8, [0.66, 0.74, 0.75]);
-    text('DIAGNÓSTICO  |  2025', 451, 801, 7.5, COLORS.lime, true);
+    text(
+      `DIAGNÓSTICO  |  ${context.school.year}`,
+      451,
+      801,
+      7.5,
+      COLORS.lime,
+      true,
+    );
 
     text('RELATÓRIO DIAGNÓSTICO', 42, 758, 8, COLORS.lime, true);
     text('Prioridades para decisão', 42, 718, 28, COLORS.white, true);
-    paragraph(
-      context.school.name,
-      42,
-      678,
-      58,
-      12,
-      COLORS.white,
-      15,
-      2,
-    );
+    paragraph(context.school.name, 42, 678, 58, 12, COLORS.white, 15, 2);
     text(
       `${context.school.municipality}/${context.school.state}  |  Código ${context.school.code}  |  ${context.school.dependency} - ${context.school.location}`,
       42,
@@ -356,7 +354,10 @@ export function buildReport(context: SchoolContext) {
       const municipalValue = context.municipalInfrastructure[key] * 10;
       const barX = 186;
       const barWidth = 240;
-      const schoolWidth = Math.max(2, (Math.min(100, schoolValue) / 100) * barWidth);
+      const schoolWidth = Math.max(
+        2,
+        (Math.min(100, schoolValue) / 100) * barWidth,
+      );
       const municipalX =
         barX + (Math.min(100, municipalValue) / 100) * barWidth;
 
@@ -375,7 +376,7 @@ export function buildReport(context: SchoolContext) {
     rect(42, 144, 511, 252, COLORS.white);
     strokeRect(42, 144, 511, 252, COLORS.line);
     rect(42, 392, 511, 4, COLORS.lime);
-    text('ENEM 2025', 60, 370, 7.5, COLORS.tealDark, true);
+    text(`ENEM ${context.school.year}`, 60, 370, 7.5, COLORS.tealDark, true);
     text('Desempenho e cobertura', 60, 349, 15, COLORS.ink, true);
 
     rect(60, 316, 475, 21, COLORS.navy);
@@ -391,7 +392,13 @@ export function buildReport(context: SchoolContext) {
       text(area.label, 70, rowY + 2, 8, COLORS.ink, true);
       text(formatNumber(area.schoolAverage), 249, rowY + 2, 8, COLORS.ink);
       text(formatNumber(area.municipalAverage), 324, rowY + 2, 8, COLORS.muted);
-      text(area.schoolParticipants.toLocaleString('pt-BR'), 407, rowY + 2, 8, COLORS.ink);
+      text(
+        area.schoolParticipants.toLocaleString('pt-BR'),
+        407,
+        rowY + 2,
+        8,
+        COLORS.ink,
+      );
 
       const lowSample = area.schoolParticipants < 30;
       rect(474, rowY - 4, 7, 7, lowSample ? COLORS.warm : COLORS.softTeal);

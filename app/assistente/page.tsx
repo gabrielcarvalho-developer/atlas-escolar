@@ -33,9 +33,9 @@ import {
 import {
   buildMunicipalityMetrics,
   buildSchoolContext,
-  MUNICIPALITIES,
-  SCHOOLS,
-  STATE_METRICS,
+  buildStateMetrics,
+  getMunicipalities,
+  getSchools,
   type SchoolContext,
   type TerritoryMetrics,
 } from '@/lib/atlas-data';
@@ -81,10 +81,12 @@ function buildSuggestions(context: SchoolContext) {
 }
 
 function welcomeMessage(context: SchoolContext): ChatMessage {
+  const municipalities = getMunicipalities(context.school.year);
+  const schools = getSchools(context.school.year);
   return {
     id: `welcome-${crypto.randomUUID()}`,
     role: 'assistant',
-    text: `Olá! Eu sou o Atlas. Agora posso consultar a base do **Maranhão**, seus **${MUNICIPALITIES.length} municípios** e as **${SCHOOLS.length} escolas identificadas**.\n\nPergunte por uma localidade ou escola específica.`,
+    text: `Olá! Eu sou o Atlas. Estou consultando **${context.school.year}**, com **${municipalities.length} municípios** e **${schools.length} escolas identificadas**. Também consigo comparar esta escola entre os anos disponíveis.\n\nPergunte por uma localidade ou escola específica.`,
     mode: 'contexto da base carregado',
     source: `Contexto atual: ${context.school.name}`,
     engine: 'system',
@@ -147,21 +149,28 @@ function RichText({ text }: { text: string }) {
 
 function territoryFromTarget(
   target: AssistantVisualizationTarget,
+  year: number,
 ): TerritoryMetrics | undefined {
-  if (target.kind === 'state') return STATE_METRICS;
+  if (target.kind === 'state') return buildStateMetrics(year);
   if (target.kind === 'municipality') {
-    return buildMunicipalityMetrics(target.municipality);
+    return buildMunicipalityMetrics(target.municipality, year);
   }
   return undefined;
 }
 
 function MessageVisualization({
   visualization,
+  year,
 }: {
   visualization: AssistantVisualization;
+  year: number;
 }) {
   if (visualization.primary.kind === 'school') {
-    const context = buildSchoolContext(visualization.primary.schoolCode, true);
+    const context = buildSchoolContext(
+      visualization.primary.schoolCode,
+      true,
+      year,
+    );
     return visualization.type === 'infrastructure' ? (
       <InfrastructureChart context={context} />
     ) : (
@@ -169,9 +178,9 @@ function MessageVisualization({
     );
   }
 
-  const primary = territoryFromTarget(visualization.primary);
+  const primary = territoryFromTarget(visualization.primary, year);
   const secondary = visualization.secondary
-    ? territoryFromTarget(visualization.secondary)
+    ? territoryFromTarget(visualization.secondary, year)
     : undefined;
   if (!primary) return null;
   return visualization.type === 'infrastructure' ? (
@@ -262,6 +271,8 @@ export default function AssistantPage() {
             municipality: atlas.municipality,
             comparisonMunicipality: atlas.comparisonMunicipality,
             compareMunicipalities: atlas.compareMunicipalities,
+            year: atlas.year,
+            saebYear: atlas.saebYear,
           },
         }),
         signal: controller.signal,
@@ -462,6 +473,7 @@ export default function AssistantPage() {
                         <div className="mt-4 min-w-0 rounded-xl bg-white p-2 sm:p-3">
                           <MessageVisualization
                             visualization={message.visualization}
+                            year={atlas.year}
                           />
                         </div>
                       )}

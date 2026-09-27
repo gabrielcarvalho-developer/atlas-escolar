@@ -37,6 +37,17 @@ function parseSelection(value: unknown): AssistantSelection {
 
   return {
     analysisLevel,
+    year:
+      typeof candidate.year === 'number' && Number.isInteger(candidate.year)
+        ? candidate.year
+        : undefined,
+    saebYear:
+      candidate.saebYear === null
+        ? null
+        : typeof candidate.saebYear === 'number' &&
+            Number.isInteger(candidate.saebYear)
+          ? candidate.saebYear
+          : undefined,
     municipality:
       typeof candidate.municipality === 'string'
         ? candidate.municipality.slice(0, 120)

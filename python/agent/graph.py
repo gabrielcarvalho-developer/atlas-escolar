@@ -296,14 +296,19 @@ def _normalize_plan_for_context(
     steps: list[PlanStep], state: AgentState
 ) -> list[PlanStep]:
     """Corrige comparações escola-município e bloqueia compare_schools inválido."""
+    selected_year = state.selection.get("year")
+    selected_saeb_year = state.selection.get("saebYear")
     if _asks_for_missing_resources(state.question) and state.school_code and steps:
+        arguments: dict[str, Any] = {"school_code": state.school_code}
+        if isinstance(selected_year, int):
+            arguments["year"] = selected_year
         return [
             steps[0].model_copy(
                 update={
                     "tool_calls": [
                         ToolCall(
                             tool_name="get_school_profile",
-                            arguments={"school_code": state.school_code},
+                            arguments=arguments,
                             step_id=steps[0].id,
                         )
                     ]
@@ -390,8 +395,35 @@ def _normalize_plan_for_context(
                     ),
                 ]
             )
-        valid_calls = []
+        year_aware_calls = []
         for tool_call in calls:
+            arguments = dict(tool_call.arguments)
+            if (
+                isinstance(selected_year, int)
+                and tool_call.tool_name
+                in {
+                    "get_school_profile",
+                    "get_municipality_metrics",
+                    "get_state_metrics",
+                    "compare_schools",
+                    "search_schools",
+                    "calculate_enem_statistics",
+                }
+                and "year" not in arguments
+            ):
+                arguments["year"] = selected_year
+            if (
+                isinstance(selected_saeb_year, int)
+                and tool_call.tool_name == "get_saeb_state_context"
+                and "year" not in arguments
+            ):
+                arguments["year"] = selected_saeb_year
+            year_aware_calls.append(
+                tool_call.model_copy(update={"arguments": arguments})
+            )
+
+        valid_calls = []
+        for tool_call in year_aware_calls:
             if _is_valid_tool_call(tool_call):
                 valid_calls.append(tool_call)
             else:

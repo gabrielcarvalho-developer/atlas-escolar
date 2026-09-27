@@ -6,6 +6,7 @@ import { useState } from 'react';
 import {
   ArrowLeftRight,
   Bot,
+  CalendarRange,
   CircleGauge,
   ClipboardCheck,
   Menu,
@@ -61,6 +62,42 @@ function Filters({ onDone }: { onDone?: () => void }) {
 
   return (
     <div className="space-y-6">
+      <section className="space-y-4 rounded-xl border border-white/10 bg-white/[0.035] p-3.5">
+        <div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-white/42">
+          <CalendarRange size={13} /> Anos de referência
+        </div>
+        <div className="space-y-2">
+          <label className="atlas-field-label" htmlFor="atlas-year">
+            Censo e ENEM
+          </label>
+          <AtlasReactSelect
+            id="atlas-year"
+            value={String(atlas.year)}
+            options={atlas.years.map((year) => ({
+              value: String(year),
+              label: String(year),
+            }))}
+            onChange={(value) => atlas.setYear(Number(value))}
+          />
+        </div>
+        {atlas.saebYear !== null && (
+          <div className="space-y-2">
+            <label className="atlas-field-label" htmlFor="atlas-saeb-year">
+              SAEB
+            </label>
+            <AtlasReactSelect
+              id="atlas-saeb-year"
+              value={String(atlas.saebYear)}
+              options={atlas.saebYears.map((year) => ({
+                value: String(year),
+                label: String(year),
+              }))}
+              onChange={(value) => atlas.setSaebYear(Number(value))}
+            />
+          </div>
+        )}
+      </section>
+
       <section>
         <p className="atlas-field-label">Visualizar dados de</p>
         <fieldset className="relative mt-2 grid grid-cols-3 rounded-full border border-white/30 bg-black/15 p-1 shadow-[inset_0_1px_4px_rgb(0_0_0/18%)]">
@@ -359,7 +396,8 @@ export function AtlasShell({ children }: { children: React.ReactNode }) {
         </header>
         <div id="atlas-content">{children}</div>
         <footer className="border-t border-[var(--line)] px-5 py-5 text-center text-xs text-[var(--muted)] sm:px-8 lg:px-10">
-          Censo/ENEM {schoolContext.school.year} · SAEB 2023
+          Censo/ENEM {atlas.year}
+          {atlas.saebYear !== null ? ` · SAEB ${atlas.saebYear}` : ''}
         </footer>
       </div>
 

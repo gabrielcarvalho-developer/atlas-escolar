@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect } from 'react';
-import { SCHOOLS } from '@/lib/atlas-data';
+import { AVAILABLE_YEARS, getSchools } from '@/lib/atlas-data';
 import { useAtlas } from '@/components/atlas-provider';
 
 type ModelContext = {
@@ -50,7 +50,9 @@ export function WebMcpTools() {
           const value = input as { schoolCode?: unknown };
           if (typeof value.schoolCode !== 'string')
             throw new Error('schoolCode deve ser uma string.');
-          const school = SCHOOLS.find((item) => item.code === value.schoolCode);
+          const school = AVAILABLE_YEARS.flatMap((year) =>
+            getSchools(year),
+          ).find((item) => item.code === value.schoolCode);
           if (!school)
             throw new Error(
               'Escola não encontrada no conjunto de dados atual.',
@@ -61,6 +63,7 @@ export function WebMcpTools() {
             schoolName: school.name,
             municipality: school.municipality,
             state: school.state,
+            year: school.year,
           };
         },
       },

@@ -7,6 +7,8 @@ export type AssistantConversationTurn = {
 
 export type AssistantSelection = {
   analysisLevel?: 'state' | 'municipality' | 'school';
+  year?: number;
+  saebYear?: number | null;
   municipality?: string;
   comparisonMunicipality?: string;
   compareMunicipalities?: boolean;

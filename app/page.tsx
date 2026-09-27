@@ -16,6 +16,8 @@ import { AtlasShell } from '@/components/atlas-shell';
 import { useAtlas } from '@/components/atlas-provider';
 import {
   EnemPerformanceChart,
+  HistoricalInfrastructureChart,
+  HistoricalPerformanceChart,
   InfrastructureChart,
   SaebStateChart,
   TerritoryInfrastructureChart,
@@ -23,10 +25,16 @@ import {
 } from '@/components/atlas-charts';
 import {
   buildMunicipalityMetrics,
+  buildMunicipalityHistory,
+  buildStateHistory,
+  buildStateMetrics,
+  ENEM_AREA_KEYS,
+  ENEM_AREA_SHORT_LABELS,
+  getSaebState,
   INFRA_KEYS,
   INFRA_LABELS,
-  SAEB_STATE,
-  STATE_METRICS,
+  INFRA_SHORT_LABELS,
+  type HistoricalPoint,
   type TerritoryMetrics,
 } from '@/lib/atlas-data';
 
@@ -110,14 +118,123 @@ function TerritoryLegend({
   );
 }
 
+function HistoricalOverview({
+  history,
+  selectedYear,
+}: {
+  history: HistoricalPoint[];
+  selectedYear: number;
+}) {
+  if (history.length < 2) return null;
+  const current = history.find((point) => point.year === selectedYear);
+  const previous = [...history]
+    .reverse()
+    .find((point) => point.year < selectedYear);
+
+  return (
+    <section className="mt-10">
+      <div className="mb-4 flex flex-col justify-between gap-2 sm:flex-row sm:items-end">
+        <div>
+          <p className="atlas-eyebrow">Evolução histórica</p>
+          <h2 className="atlas-section-title">Comparativo entre anos</h2>
+          <p className="atlas-section-copy">
+            Todos os anos disponíveis para este recorte, sem preencher períodos
+            ausentes.
+          </p>
+        </div>
+        {current && previous && (
+          <p className="text-xs font-semibold text-[var(--muted)]">
+            Variação de {previous.year} para {current.year}
+          </p>
+        )}
+      </div>
+
+      {current && previous && (
+        <div className="mb-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+          {ENEM_AREA_KEYS.map((key) => {
+            const currentValue = current.averages[key];
+            const previousValue = previous.averages[key];
+            const delta =
+              currentValue === null || previousValue === null
+                ? null
+                : currentValue - previousValue;
+            return (
+              <article key={key} className="atlas-card p-4">
+                <p className="text-[10px] font-bold uppercase tracking-[0.08em] text-[var(--muted)]">
+                  {ENEM_AREA_SHORT_LABELS[key]}
+                </p>
+                <p
+                  className={`mt-2 text-lg font-extrabold ${
+                    delta === null || delta === 0
+                      ? 'text-[var(--muted)]'
+                      : delta > 0
+                        ? 'text-[var(--teal)]'
+                        : 'text-[#a34b42]'
+                  }`}
+                >
+                  {delta === null
+                    ? 'Sem comparação'
+                    : `${delta > 0 ? '+' : ''}${delta.toLocaleString('pt-BR', {
+                        maximumFractionDigits: 1,
+                      })} pts`}
+                </p>
+              </article>
+            );
+          })}
+        </div>
+      )}
+
+      <div className="grid gap-4 xl:grid-cols-2">
+        <article className="atlas-card min-w-0 p-4 sm:p-6">
+          <p className="atlas-eyebrow">ENEM</p>
+          <h3 className="atlas-section-title">Notas ao longo do tempo</h3>
+          <HistoricalPerformanceChart history={history} />
+        </article>
+        <article className="atlas-card min-w-0 p-4 sm:p-6">
+          <p className="atlas-eyebrow">Infraestrutura</p>
+          <h3 className="atlas-section-title">Condições ao longo do tempo</h3>
+          <HistoricalInfrastructureChart history={history} />
+          {current && previous && (
+            <div className="mt-3 flex flex-wrap gap-2">
+              {INFRA_KEYS.map((key) => {
+                const delta =
+                  (current.infrastructure[key] - previous.infrastructure[key]) *
+                  10;
+                return (
+                  <span
+                    key={key}
+                    className="rounded-full bg-[var(--canvas)] px-3 py-1.5 text-[11px] font-semibold text-[var(--muted)]"
+                  >
+                    {INFRA_SHORT_LABELS[key]}: {delta > 0 ? '+' : ''}
+                    {delta.toLocaleString('pt-BR', {
+                      maximumFractionDigits: 1,
+                    })}{' '}
+                    p.p.
+                  </span>
+                );
+              })}
+            </div>
+          )}
+        </article>
+      </div>
+    </section>
+  );
+}
+
 function TerritoryOverview({
   primary,
   secondary,
+  saebYear,
 }: {
   primary: TerritoryMetrics;
   secondary?: TerritoryMetrics;
+  saebYear: number | null;
 }) {
   const territories = secondary ? [primary, secondary] : [primary];
+  const history =
+    primary.kind === 'state'
+      ? buildStateHistory()
+      : buildMunicipalityHistory(primary.name);
   const metrics = [
     {
       label: 'Escolas públicas',
@@ -170,7 +287,7 @@ function TerritoryOverview({
         </div>
         <div className="flex w-fit items-center gap-2 rounded-full border border-[var(--line)] bg-white px-3.5 py-2 text-xs font-semibold text-[var(--muted)] shadow-sm">
           <Database size={14} className="text-[var(--teal)]" />
-          Censo/ENEM 2025
+          Censo/ENEM {primary.year}
         </div>
       </section>
 
@@ -292,7 +409,7 @@ function TerritoryOverview({
         </article>
 
         <article className="atlas-card min-w-0 p-4 sm:p-6">
-          <p className="atlas-eyebrow">ENEM 2025</p>
+          <p className="atlas-eyebrow">ENEM {primary.year}</p>
           <h2 className="atlas-section-title">Médias por área</h2>
           <p className="atlas-section-copy">
             Resultados agregados e ponderados pelos participantes.
@@ -309,16 +426,18 @@ function TerritoryOverview({
         </article>
       </section>
 
-      {primary.kind === 'state' && (
+      <HistoricalOverview history={history} selectedYear={primary.year} />
+
+      {primary.kind === 'state' && saebYear !== null && (
         <section className="mt-4">
           <article className="atlas-card min-w-0 p-4 sm:p-6">
-            <p className="atlas-eyebrow">SAEB 2023</p>
+            <p className="atlas-eyebrow">SAEB {saebYear}</p>
             <h2 className="atlas-section-title">Contexto do Maranhão</h2>
             <p className="atlas-section-copy">
               Médias estaduais ponderadas por estudantes presentes.
             </p>
             <div className="mt-4 min-w-0">
-              <SaebStateChart />
+              <SaebStateChart year={saebYear} />
             </div>
           </article>
         </section>
@@ -334,23 +453,27 @@ export default function OverviewPage() {
   if (atlas.analysisLevel !== 'school') {
     const primary =
       atlas.analysisLevel === 'state'
-        ? STATE_METRICS
-        : buildMunicipalityMetrics(atlas.municipality);
+        ? buildStateMetrics(atlas.year)
+        : buildMunicipalityMetrics(atlas.municipality, atlas.year);
     const secondary =
       atlas.analysisLevel === 'municipality' && atlas.compareMunicipalities
-        ? buildMunicipalityMetrics(atlas.comparisonMunicipality)
+        ? buildMunicipalityMetrics(atlas.comparisonMunicipality, atlas.year)
         : undefined;
 
     return (
       <AtlasShell>
-        <TerritoryOverview primary={primary} secondary={secondary} />
+        <TerritoryOverview
+          primary={primary}
+          secondary={secondary}
+          saebYear={atlas.saebYear}
+        />
       </AtlasShell>
     );
   }
   const criticalPercentage =
     context.school.infrastructure[context.criticalFactor] * 10;
   const math = context.performanceAreas.find((area) => area.key === 'mt')!;
-  const stateSaebHighSchool = SAEB_STATE.find(
+  const stateSaebHighSchool = getSaebState(atlas.saebYear).find(
     (row) => row.ETAPA === 'Ensino Médio',
   );
 
@@ -517,7 +640,7 @@ export default function OverviewPage() {
           <article className="atlas-card min-w-0 p-4 sm:p-6">
             <div>
               <div>
-                <p className="atlas-eyebrow">ENEM 2025</p>
+                <p className="atlas-eyebrow">ENEM {context.school.year}</p>
                 <h2 className="atlas-section-title">Médias por área</h2>
                 <p className="atlas-section-copy">
                   Resultados acompanhados da amostra de participantes.
@@ -532,6 +655,11 @@ export default function OverviewPage() {
             </div>
           </article>
         </section>
+
+        <HistoricalOverview
+          history={context.history}
+          selectedYear={context.school.year}
+        />
 
         <section className="mt-4 grid gap-4 xl:grid-cols-2">
           <article className="atlas-card p-4 sm:p-6">
@@ -600,27 +728,31 @@ export default function OverviewPage() {
             </div>
           </article>
 
-          <article className="atlas-card min-w-0 p-4 sm:p-6">
-            <p className="atlas-eyebrow">SAEB 2023</p>
-            <h2 className="atlas-section-title">Contexto do Maranhão</h2>
-            <p className="atlas-section-copy">
-              Médias estaduais ponderadas por estudantes presentes.
-            </p>
-            <div className="mt-4 min-w-0">
-              <SaebStateChart />
-            </div>
-            {stateSaebHighSchool && (
-              <p className="mt-1 rounded-xl bg-[var(--canvas)] px-3.5 py-3 text-xs leading-relaxed text-[var(--muted)]">
-                Ensino Médio: participação de{' '}
-                {stateSaebHighSchool.TAXA_PARTICIPACAO_AGREGADA?.toLocaleString(
-                  'pt-BR',
-                )}
-                % em{' '}
-                {stateSaebHighSchool.QTD_ESCOLAS_GRUPO.toLocaleString('pt-BR')}{' '}
-                escolas do grupo.
+          {atlas.saebYear !== null && (
+            <article className="atlas-card min-w-0 p-4 sm:p-6">
+              <p className="atlas-eyebrow">SAEB {atlas.saebYear}</p>
+              <h2 className="atlas-section-title">Contexto do Maranhão</h2>
+              <p className="atlas-section-copy">
+                Médias estaduais ponderadas por estudantes presentes.
               </p>
-            )}
-          </article>
+              <div className="mt-4 min-w-0">
+                <SaebStateChart year={atlas.saebYear} />
+              </div>
+              {stateSaebHighSchool && (
+                <p className="mt-1 rounded-xl bg-[var(--canvas)] px-3.5 py-3 text-xs leading-relaxed text-[var(--muted)]">
+                  Ensino Médio: participação de{' '}
+                  {stateSaebHighSchool.TAXA_PARTICIPACAO_AGREGADA?.toLocaleString(
+                    'pt-BR',
+                  )}
+                  % em{' '}
+                  {stateSaebHighSchool.QTD_ESCOLAS_GRUPO.toLocaleString(
+                    'pt-BR',
+                  )}{' '}
+                  escolas do grupo.
+                </p>
+              )}
+            </article>
+          )}
         </section>
 
         <section className="relative mb-2 mt-6 overflow-hidden rounded-[12px] bg-[var(--navy)] p-5 text-white shadow-[0_22px_65px_rgb(18_47_56/14%)] sm:p-7 lg:p-8">

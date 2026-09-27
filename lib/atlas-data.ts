@@ -163,25 +163,33 @@ export type SaebRow = {
   MEDIANA_ESCOLAR_FORMACAO_DOCENTE: number;
 };
 
+type Acceptance = {
+  publicSchools: number;
+  municipalities: number;
+  highSchools: number;
+  enemSchools: number;
+  linkedSchools: number;
+  unlinkedSchools: number;
+  enemRecords: number;
+  saebRows?: number;
+};
+
 type RuntimeData = {
   manifest: {
     project: string;
     version: string;
     documentationDate: string;
-    acceptance: {
-      publicSchools: number;
-      municipalities: number;
-      highSchools: number;
-      enemSchools: number;
-      linkedSchools: number;
-      unlinkedSchools: number;
-      enemRecords: number;
-      saebRows: number;
-    };
+    availableYears: { atlas: number[]; saeb: number[] };
+    defaultYear: number;
+    defaultSaebYear: number | null;
+    acceptance: Acceptance;
+    acceptanceByYear: Record<string, Acceptance>;
   };
-  schools: SchoolRow[];
-  municipalities: MunicipalityRow[];
-  saeb: SaebRow[];
+  years: Record<
+    string,
+    { schools: SchoolRow[]; municipalities: MunicipalityRow[] }
+  >;
+  saebByYear: Record<string, SaebRow[]>;
 };
 
 const DATA = generatedData as unknown as RuntimeData;
@@ -194,12 +202,14 @@ export type School = {
   name: string;
   dependency: 'Federal' | 'Estadual' | 'Municipal';
   location: 'Urbana' | 'Rural';
-  year: 2025;
+  year: number;
   dataType: 'REAL';
   source: string;
   records: number;
   participants: Record<EnemAreaKey, number>;
-  averages: Record<EnemAreaKey, number | null> & { validEssay: number | null };
+  averages: Record<EnemAreaKey, number | null> & {
+    validEssay: number | null;
+  };
   validEssayCount: number;
   validEssayPercentage: number | null;
   infrastructure: Record<InfraKey, number>;
@@ -233,6 +243,7 @@ export type School = {
 export type Municipality = {
   code: string;
   name: string;
+  year: number;
   schoolCount: number;
   highSchoolCount: number;
   enemRecords: number;
@@ -250,6 +261,7 @@ export type TerritoryMetrics = {
   kind: 'state' | 'municipality';
   name: string;
   eyebrow: string;
+  year: number;
   schoolCount: number;
   highSchoolCount: number;
   enemRecords: number;
@@ -261,15 +273,20 @@ export type TerritoryMetrics = {
   infrastructure: Record<InfraKey, number>;
 };
 
+export type HistoricalPoint = {
+  year: number;
+  averages: Record<EnemAreaKey, number | null>;
+  participants: Record<EnemAreaKey, number>;
+  infrastructure: Record<InfraKey, number>;
+};
+
 function average(values: number[]) {
   return values.length
     ? values.reduce((total, value) => total + value, 0) / values.length
     : 0;
 }
 
-function weightedAverage(
-  values: Array<{ value: number; weight: number }>,
-): number {
+function weightedAverage(values: Array<{ value: number; weight: number }>) {
   const totalWeight = values.reduce((total, item) => total + item.weight, 0);
   if (!totalWeight) return 0;
   return (
@@ -320,44 +337,8 @@ function municipalityInfrastructure(
   };
 }
 
-export const MUNICIPALITIES: Municipality[] = DATA.municipalities.map(
-  (row) => ({
-    code: row.CO_MUNICIPIO,
-    name: row.NO_MUNICIPIO,
-    schoolCount: row.QTD_ESCOLAS,
-    highSchoolCount: row.QTD_ESCOLAS_ENSINO_MEDIO,
-    enemRecords: row.QTD_REGISTROS_ENEM,
-    enemSchoolCount: row.QTD_ESCOLAS_ENEM_TOTAL,
-    linkedEnemSchoolCount: row.QTD_ESCOLAS_ENEM_IDENTIFICADAS_CENSO,
-    unlinkedEnemSchoolCount: row.QTD_ESCOLAS_ENEM_NAO_VINCULADAS_CENSO,
-    linkedCoveragePercentage:
-      row.PCT_ESCOLAS_ENSINO_MEDIO_IDENTIFICADAS_NO_ENEM,
-    unlinkedPercentage: row.PCT_ESCOLAS_ENEM_NAO_VINCULADAS_CENSO,
-    participants: {
-      cn: row.QTD_PARTICIPANTES_CN,
-      ch: row.QTD_PARTICIPANTES_CH,
-      lc: row.QTD_PARTICIPANTES_LC,
-      mt: row.QTD_PARTICIPANTES_MT,
-      essay: row.QTD_PRESENTES_REDACAO,
-    },
-    averages: {
-      cn: row.MEDIA_CN,
-      ch: row.MEDIA_CH,
-      lc: row.MEDIA_LC,
-      mt: row.MEDIA_MT,
-      essay: row.MEDIA_REDACAO_GERAL,
-      validEssay: row.MEDIA_REDACAO_SEM_PROBLEMAS,
-    },
-    infrastructure: municipalityInfrastructure(row),
-  }),
-);
-
-const municipalityByCode = new Map(
-  MUNICIPALITIES.map((municipality) => [municipality.code, municipality]),
-);
-
-export const SCHOOLS: School[] = DATA.schools
-  .map<School>((row) => ({
+function schoolFromRow(row: SchoolRow, year: number): School {
+  return {
     code: row.CO_ESCOLA,
     municipalityCode: row.CO_MUNICIPIO,
     state: 'MA',
@@ -365,7 +346,7 @@ export const SCHOOLS: School[] = DATA.schools
     name: row.NO_ESCOLA,
     dependency: dependencyLabel(row.DEPENDENCIA),
     location: row.LOCALIZACAO === 2 ? 'Rural' : 'Urbana',
-    year: 2025,
+    year,
     dataType: 'REAL',
     source: row.FONTE_IDENTIFICACAO,
     records: row.QTD_REGISTROS,
@@ -418,24 +399,116 @@ export const SCHOOLS: School[] = DATA.schools
       accessibleRoomPercentage: row.PERCENTUAL_SALAS_ACESSIVEIS,
       noAccessibilityResource: row.IN_ACESSIBILIDADE_INEXISTENTE === 1,
     },
-  }))
-  .sort(
-    (left, right) =>
-      left.municipality.localeCompare(right.municipality, 'pt-BR') ||
-      left.name.localeCompare(right.name, 'pt-BR'),
+  };
+}
+
+function municipalityFromRow(row: MunicipalityRow, year: number): Municipality {
+  return {
+    code: row.CO_MUNICIPIO,
+    name: row.NO_MUNICIPIO,
+    year,
+    schoolCount: row.QTD_ESCOLAS,
+    highSchoolCount: row.QTD_ESCOLAS_ENSINO_MEDIO,
+    enemRecords: row.QTD_REGISTROS_ENEM,
+    enemSchoolCount: row.QTD_ESCOLAS_ENEM_TOTAL,
+    linkedEnemSchoolCount: row.QTD_ESCOLAS_ENEM_IDENTIFICADAS_CENSO,
+    unlinkedEnemSchoolCount: row.QTD_ESCOLAS_ENEM_NAO_VINCULADAS_CENSO,
+    linkedCoveragePercentage:
+      row.PCT_ESCOLAS_ENSINO_MEDIO_IDENTIFICADAS_NO_ENEM,
+    unlinkedPercentage: row.PCT_ESCOLAS_ENEM_NAO_VINCULADAS_CENSO,
+    participants: {
+      cn: row.QTD_PARTICIPANTES_CN,
+      ch: row.QTD_PARTICIPANTES_CH,
+      lc: row.QTD_PARTICIPANTES_LC,
+      mt: row.QTD_PARTICIPANTES_MT,
+      essay: row.QTD_PRESENTES_REDACAO,
+    },
+    averages: {
+      cn: row.MEDIA_CN,
+      ch: row.MEDIA_CH,
+      lc: row.MEDIA_LC,
+      mt: row.MEDIA_MT,
+      essay: row.MEDIA_REDACAO_GERAL,
+      validEssay: row.MEDIA_REDACAO_SEM_PROBLEMAS,
+    },
+    infrastructure: municipalityInfrastructure(row),
+  };
+}
+
+export const AVAILABLE_YEARS = [...DATA.manifest.availableYears.atlas].sort(
+  (left, right) => right - left,
+);
+export const SAEB_AVAILABLE_YEARS = [...DATA.manifest.availableYears.saeb].sort(
+  (left, right) => right - left,
+);
+export const DEFAULT_YEAR = DATA.manifest.defaultYear;
+export const DEFAULT_SAEB_YEAR = DATA.manifest.defaultSaebYear;
+
+const schoolsByYear = new Map<number, School[]>();
+const municipalitiesByYear = new Map<number, Municipality[]>();
+
+for (const year of AVAILABLE_YEARS) {
+  const rows = DATA.years[String(year)];
+  schoolsByYear.set(
+    year,
+    rows.schools
+      .map((row) => schoolFromRow(row, year))
+      .sort(
+        (left, right) =>
+          left.municipality.localeCompare(right.municipality, 'pt-BR') ||
+          left.name.localeCompare(right.name, 'pt-BR'),
+      ),
   );
+  municipalitiesByYear.set(
+    year,
+    rows.municipalities
+      .map((row) => municipalityFromRow(row, year))
+      .sort((left, right) => left.name.localeCompare(right.name, 'pt-BR')),
+  );
+}
+
+export function getSchools(year = DEFAULT_YEAR) {
+  return schoolsByYear.get(year) ?? schoolsByYear.get(DEFAULT_YEAR) ?? [];
+}
+
+export function getMunicipalities(year = DEFAULT_YEAR) {
+  return (
+    municipalitiesByYear.get(year) ??
+    municipalitiesByYear.get(DEFAULT_YEAR) ??
+    []
+  );
+}
+
+export function getSaebState(year = DEFAULT_SAEB_YEAR) {
+  if (year === null) return [];
+  return (DATA.saebByYear[String(year)] ?? []).filter(
+    (row) => row.DIMENSAO === 'Estado',
+  );
+}
+
+// Exportações do ano padrão são mantidas para consumidores externos existentes.
+export const SCHOOLS = getSchools();
+export const MUNICIPALITIES = getMunicipalities();
+export const SAEB_CONTEXT = DEFAULT_SAEB_YEAR
+  ? (DATA.saebByYear[String(DEFAULT_SAEB_YEAR)] ?? [])
+  : [];
+export const SAEB_STATE = getSaebState();
 
 export function buildMunicipalityMetrics(
   municipalityName: string,
+  year = DEFAULT_YEAR,
 ): TerritoryMetrics {
+  const municipalities = getMunicipalities(year);
   const municipality =
-    MUNICIPALITIES.find((item) => item.name === municipalityName) ??
-    MUNICIPALITIES[0];
+    municipalities.find((item) => item.name === municipalityName) ??
+    municipalities[0];
+  if (!municipality) throw new Error(`Não há dados municipais para ${year}.`);
 
   return {
     kind: 'municipality',
     name: municipality.name,
     eyebrow: 'Município do Maranhão',
+    year,
     schoolCount: municipality.schoolCount,
     highSchoolCount: municipality.highSchoolCount,
     enemRecords: municipality.enemRecords,
@@ -454,90 +527,144 @@ export function buildMunicipalityMetrics(
   };
 }
 
-export const STATE_METRICS: TerritoryMetrics = {
-  kind: 'state',
-  name: 'Maranhão',
-  eyebrow: 'Visão estadual',
-  schoolCount: MUNICIPALITIES.reduce(
-    (total, municipality) => total + municipality.schoolCount,
-    0,
-  ),
-  highSchoolCount: MUNICIPALITIES.reduce(
+export function buildStateMetrics(year = DEFAULT_YEAR): TerritoryMetrics {
+  const municipalities = getMunicipalities(year);
+  const highSchoolCount = municipalities.reduce(
     (total, municipality) => total + municipality.highSchoolCount,
     0,
-  ),
-  enemRecords: MUNICIPALITIES.reduce(
-    (total, municipality) => total + municipality.enemRecords,
-    0,
-  ),
-  enemSchoolCount: MUNICIPALITIES.reduce(
-    (total, municipality) => total + municipality.enemSchoolCount,
-    0,
-  ),
-  linkedEnemSchoolCount: MUNICIPALITIES.reduce(
+  );
+  const linkedSchoolCount = municipalities.reduce(
     (total, municipality) => total + municipality.linkedEnemSchoolCount,
     0,
-  ),
-  linkedCoveragePercentage: (() => {
-    const highSchoolCount = MUNICIPALITIES.reduce(
-      (total, municipality) => total + municipality.highSchoolCount,
-      0,
-    );
-    const linkedSchoolCount = MUNICIPALITIES.reduce(
-      (total, municipality) => total + municipality.linkedEnemSchoolCount,
-      0,
-    );
-    return highSchoolCount ? (linkedSchoolCount / highSchoolCount) * 100 : 0;
-  })(),
-  participants: Object.fromEntries(
-    ENEM_AREA_KEYS.map((key) => [
-      key,
-      MUNICIPALITIES.reduce(
-        (total, municipality) => total + municipality.participants[key],
-        0,
-      ),
-    ]),
-  ) as Record<EnemAreaKey, number>,
-  averages: Object.fromEntries(
-    ENEM_AREA_KEYS.map((key) => [
-      key,
-      weightedAverage(
-        MUNICIPALITIES.map((municipality) => ({
-          value: municipality.averages[key],
-          weight: municipality.participants[key],
-        })),
-      ),
-    ]),
-  ) as Record<EnemAreaKey, number>,
-  infrastructure: Object.fromEntries(
-    INFRA_KEYS.map((key) => [
-      key,
-      weightedAverage(
-        MUNICIPALITIES.map((municipality) => ({
-          value: municipality.infrastructure[key],
-          weight: municipality.schoolCount,
-        })),
-      ),
-    ]),
-  ) as Record<InfraKey, number>,
-};
+  );
 
+  return {
+    kind: 'state',
+    name: 'Maranhão',
+    eyebrow: 'Visão estadual',
+    year,
+    schoolCount: municipalities.reduce(
+      (total, municipality) => total + municipality.schoolCount,
+      0,
+    ),
+    highSchoolCount,
+    enemRecords: municipalities.reduce(
+      (total, municipality) => total + municipality.enemRecords,
+      0,
+    ),
+    enemSchoolCount: municipalities.reduce(
+      (total, municipality) => total + municipality.enemSchoolCount,
+      0,
+    ),
+    linkedEnemSchoolCount: linkedSchoolCount,
+    linkedCoveragePercentage: highSchoolCount
+      ? (linkedSchoolCount / highSchoolCount) * 100
+      : 0,
+    participants: Object.fromEntries(
+      ENEM_AREA_KEYS.map((key) => [
+        key,
+        municipalities.reduce(
+          (total, municipality) => total + municipality.participants[key],
+          0,
+        ),
+      ]),
+    ) as Record<EnemAreaKey, number>,
+    averages: Object.fromEntries(
+      ENEM_AREA_KEYS.map((key) => [
+        key,
+        weightedAverage(
+          municipalities.map((municipality) => ({
+            value: municipality.averages[key],
+            weight: municipality.participants[key],
+          })),
+        ),
+      ]),
+    ) as Record<EnemAreaKey, number>,
+    infrastructure: Object.fromEntries(
+      INFRA_KEYS.map((key) => [
+        key,
+        weightedAverage(
+          municipalities.map((municipality) => ({
+            value: municipality.infrastructure[key],
+            weight: municipality.schoolCount,
+          })),
+        ),
+      ]),
+    ) as Record<InfraKey, number>,
+  };
+}
+
+export const STATE_METRICS = buildStateMetrics();
 export const DATA_MANIFEST = DATA.manifest;
-export const SAEB_CONTEXT = DATA.saeb;
-export const SAEB_STATE = DATA.saeb.filter((row) => row.DIMENSAO === 'Estado');
 export const DEFAULT_SCHOOL_CODE =
-  SCHOOLS.find((school) => school.code === '21288780')?.code ?? SCHOOLS[0].code;
+  SCHOOLS.find((school) => school.code === '21288780')?.code ??
+  SCHOOLS[0]?.code ??
+  '';
+
+function pointFromSchool(school: School): HistoricalPoint {
+  return {
+    year: school.year,
+    averages: Object.fromEntries(
+      ENEM_AREA_KEYS.map((key) => [key, school.averages[key]]),
+    ) as Record<EnemAreaKey, number | null>,
+    participants: school.participants,
+    infrastructure: school.infrastructure,
+  };
+}
+
+function pointFromTerritory(metrics: TerritoryMetrics): HistoricalPoint {
+  return {
+    year: metrics.year,
+    averages: metrics.averages,
+    participants: metrics.participants,
+    infrastructure: metrics.infrastructure,
+  };
+}
+
+export function buildSchoolHistory(schoolCode: string) {
+  return AVAILABLE_YEARS.map((year) =>
+    getSchools(year).find((school) => school.code === schoolCode),
+  )
+    .filter((school): school is School => Boolean(school))
+    .map(pointFromSchool)
+    .sort((left, right) => left.year - right.year);
+}
+
+export function buildMunicipalityHistory(municipalityName: string) {
+  return AVAILABLE_YEARS.filter((year) =>
+    getMunicipalities(year).some(
+      (municipality) => municipality.name === municipalityName,
+    ),
+  )
+    .map((year) =>
+      pointFromTerritory(buildMunicipalityMetrics(municipalityName, year)),
+    )
+    .sort((left, right) => left.year - right.year);
+}
+
+export function buildStateHistory() {
+  return AVAILABLE_YEARS.map((year) =>
+    pointFromTerritory(buildStateMetrics(year)),
+  ).sort((left, right) => left.year - right.year);
+}
 
 export type SchoolContext = ReturnType<typeof buildSchoolContext>;
 
 export function buildSchoolContext(
   schoolCode: string,
   compareMunicipal: boolean,
+  year = DEFAULT_YEAR,
 ) {
-  const school = SCHOOLS.find((item) => item.code === schoolCode) ?? SCHOOLS[0];
+  const schools = getSchools(year);
+  const municipalities = getMunicipalities(year);
+  const school = schools.find((item) => item.code === schoolCode) ?? schools[0];
+  if (!school) throw new Error(`Não há escolas disponíveis para ${year}.`);
   const municipality =
-    municipalityByCode.get(school.municipalityCode) ?? MUNICIPALITIES[0];
-  const municipalitySchools = SCHOOLS.filter(
+    municipalities.find((item) => item.code === school.municipalityCode) ??
+    municipalities[0];
+  if (!municipality)
+    throw new Error(`Não há municípios disponíveis para ${year}.`);
+  const municipalitySchools = schools.filter(
     (item) => item.municipalityCode === school.municipalityCode,
   );
   const infrastructureScore = average(
@@ -573,6 +700,10 @@ export function buildSchoolContext(
   const lowSampleAreas = performanceAreas.filter(
     (area) => area.schoolParticipants < 30,
   );
+  const history = buildSchoolHistory(school.code);
+  const previous = [...history]
+    .reverse()
+    .find((point) => point.year < school.year);
 
   return {
     school,
@@ -594,12 +725,23 @@ export function buildSchoolContext(
     lowestPerformanceArea,
     lowSampleAreas,
     compareMunicipal,
+    history,
+    previous,
   };
 }
 
-export const DOCUMENT_SOURCES = {
-  school: 'ENEM 2025 + Censo Escolar 2025 · base escolar identificada',
-  municipality: 'Censo Escolar 2025 + ENEM 2025 · agregação municipal',
-  saeb: 'SAEB 2023 · contexto estadual do Maranhão',
-  dictionary: 'Dicionário de Dados ATLAS Escolar · versão 1.0',
-};
+export function documentSources(
+  year = DEFAULT_YEAR,
+  saebYear = DEFAULT_SAEB_YEAR,
+) {
+  return {
+    school: `ENEM ${year} + Censo Escolar ${year} · base escolar identificada`,
+    municipality: `Censo Escolar ${year} + ENEM ${year} · agregação municipal`,
+    saeb: saebYear
+      ? `SAEB ${saebYear} · contexto estadual do Maranhão`
+      : 'SAEB não disponível',
+    dictionary: `Dicionário de Dados ATLAS Escolar · versão ${DATA.manifest.version}`,
+  };
+}
+
+export const DOCUMENT_SOURCES = documentSources();

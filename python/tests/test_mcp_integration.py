@@ -15,6 +15,7 @@ from agent.mcp_client import REQUIRED_TOOLS, create_mcp_client, decode_tool_resu
 from agent.state import AgentState, PlanStep, ToolCall
 from api import _answer_chunks, _sse_event
 from mcp_server import mcp
+from tools import atlas_tools
 
 
 async def test_mcp_server_exposes_the_required_contract() -> None:
@@ -73,6 +74,55 @@ async def test_mcp_tool_returns_real_school_data() -> None:
     assert result["code"] == "21288780"
     assert result["municipality"] == "Coelho Neto"
     assert result["source"] == "ENEM 2025 + Censo Escolar 2025"
+
+
+def test_school_profile_compares_all_available_years(monkeypatch) -> None:
+    def school_row(year: int, math_average: float, connectivity: float) -> dict:
+        return {
+            "CO_ESCOLA": "21000000",
+            "NO_ESCOLA": "Escola Histórica",
+            "CO_MUNICIPIO": "2100000",
+            "NO_MUNICIPIO": "Município",
+            "DEPENDENCIA": 2,
+            "LOCALIZACAO": 1,
+            "QTD_REGISTROS": 40,
+            "QTD_PARTICIPANTES_MT": 35,
+            "MEDIA_MT": math_average,
+            "PERCENTUAL_RECURSOS_CONECTIVIDADE": connectivity,
+        }
+
+    runtime = {
+        "manifest": {
+            "defaultYear": 2025,
+            "defaultSaebYear": None,
+            "availableYears": {"atlas": [2025, 2024], "saeb": []},
+        },
+        "years": {
+            "2024": {
+                "schools": [school_row(2024, 500, 50)],
+                "municipalities": [],
+            },
+            "2025": {
+                "schools": [school_row(2025, 520, 60)],
+                "municipalities": [],
+            },
+        },
+        "saebByYear": {},
+    }
+    monkeypatch.setattr(atlas_tools, "_load_data", lambda: runtime)
+
+    result = atlas_tools.get_school_profile("21000000", 2025)
+
+    assert result["availableYears"] == [2024, 2025]
+    assert [point["year"] for point in result["history"]] == [2024, 2025]
+    comparison = result["comparisonWithPrevious"]
+    assert comparison["fromYear"] == 2024
+    assert comparison["toYear"] == 2025
+    assert comparison["enem"]["mt"] == {"change": 20, "direction": "improved"}
+    assert comparison["infrastructure"]["connectivity"] == {
+        "change": 10,
+        "direction": "improved",
+    }
 
 
 async def test_mcp_municipality_lookup_is_accent_insensitive() -> None:
