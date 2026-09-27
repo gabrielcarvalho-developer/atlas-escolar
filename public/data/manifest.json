@@ -5,15 +5,27 @@
   "generatedFrom": "data/incoming/bases",
   "availableYears": {
     "atlas": [
-      2025
+      2025,
+      2024
     ],
     "saeb": [
-      2023
+      2023,
+      2021
     ]
   },
   "defaultYear": 2025,
   "defaultSaebYear": 2023,
   "datasets": {
+    "censo_enem_municipios_ma_2024.csv": {
+      "sha256": "fa28abc9b23c2a71704169f286555eaf95aa33fa7725a37241ba18825d95e2aa",
+      "rows": 217,
+      "columns": 71,
+      "source": "Censo Escolar 2025 + ENEM 2025",
+      "purpose": "Dashboard municipal Censo + ENEM",
+      "kind": "municipalities",
+      "year": 2024,
+      "documented": false
+    },
     "censo_enem_municipios_ma_2025.csv": {
       "sha256": "ccd39479fa2dff341e205b5cf23e6ea02130271b13d87db2a85640ace4d2fd36",
       "rows": 217,
@@ -23,6 +35,16 @@
       "kind": "municipalities",
       "year": 2025,
       "documented": true
+    },
+    "censo_municipios_ma_2024.csv": {
+      "sha256": "fb8961b1caa8c7b0857c87f9e37172bb55ece856102dd97b68a57ef95092fe62",
+      "rows": 217,
+      "columns": 41,
+      "source": "Censo Escolar 2025",
+      "purpose": "Dashboard municipal somente Censo",
+      "kind": "census",
+      "year": 2024,
+      "documented": false
     },
     "censo_municipios_ma_2025.csv": {
       "sha256": "29263e807d11bd380dc9ed1479dc3be255eef1e9356cbb08c2e6bf608ccc4658",
@@ -34,6 +56,16 @@
       "year": 2025,
       "documented": true
     },
+    "enem_censo_indicadores_infraestrutura_2024.csv": {
+      "sha256": "28a298a50ccc40944bcbddf727b97de4c8e6ef81466eacb1acaa7dc8ea7dcdcf",
+      "rows": 669,
+      "columns": 60,
+      "source": "ENEM 2025 + Censo Escolar 2025",
+      "purpose": "Dashboard individual por escola",
+      "kind": "schools",
+      "year": 2024,
+      "documented": false
+    },
     "enem_censo_indicadores_infraestrutura_2025.csv": {
       "sha256": "90f5cee972fb2cbedce139477bc727fa88dfc076ff8a94b2a721bf6795968daf",
       "rows": 711,
@@ -43,6 +75,16 @@
       "kind": "schools",
       "year": 2025,
       "documented": true
+    },
+    "saeb_contexto_estadual_ma_2021.csv": {
+      "sha256": "69011e1a0f6b1173c21c2f15d1196466833fd6e89e17066f39e429e66a8e2bf2",
+      "rows": 30,
+      "columns": 22,
+      "source": "SAEB 2023",
+      "purpose": "Contexto estadual do Maranhão",
+      "kind": "saeb",
+      "year": 2021,
+      "documented": false
     },
     "saeb_contexto_estadual_ma_2023.csv": {
       "sha256": "fda5cfca27878b9045c234b83a0f0343d4045a08a3c81b6a2d52d85e05986bf5",
@@ -66,6 +108,15 @@
     "saebRows": 30
   },
   "acceptanceByYear": {
+    "2024": {
+      "publicSchools": 10213,
+      "municipalities": 217,
+      "highSchools": 941,
+      "enemSchools": 805,
+      "linkedSchools": 669,
+      "unlinkedSchools": 136,
+      "enemRecords": 51923
+    },
     "2025": {
       "publicSchools": 10080,
       "municipalities": 217,
