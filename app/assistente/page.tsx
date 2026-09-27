@@ -5,11 +5,8 @@ import {
   BarChart3,
   Bot,
   Bolt,
-  Construction,
   Database,
   HardDrive,
-  History,
-  LaptopMinimal,
   RotateCcw,
   SendHorizontal,
   UserRound,
@@ -70,21 +67,6 @@ function buildSuggestions(context: SchoolContext) {
       icon: BarChart3,
     },
     {
-      label: 'Gargalo de infraestrutura',
-      question: 'Qual é o principal gargalo de infraestrutura desta escola?',
-      icon: Construction,
-    },
-    {
-      label: 'Recursos ausentes',
-      question: 'Quais recursos não estão registrados nesta escola?',
-      icon: LaptopMinimal,
-    },
-    {
-      label: 'Evolução histórica',
-      question: 'Como esta escola evoluiu entre os anos disponíveis?',
-      icon: History,
-    },
-    {
       label: 'Quem desenvolveu o Atlas?',
       question: 'Quem desenvolveu você?',
       icon: Users,
@@ -100,7 +82,6 @@ function welcomeMessage(context: SchoolContext): ChatMessage {
     role: 'assistant',
     text: `Olá! Eu sou o Atlas. Estou consultando **${context.school.year}**, com **${municipalities.length} municípios** e **${schools.length} escolas identificadas**. Também consigo comparar esta escola entre os anos disponíveis.\n\nPergunte por uma localidade ou escola específica.`,
     mode: 'contexto da base carregado',
-    source: `Contexto atual: ${context.school.name}`,
     engine: 'system',
   };
 }
@@ -141,6 +122,17 @@ function waitForTypingFrame() {
   );
 }
 
+const SOURCE_FOOTER_PATTERN =
+  /(?:^|\n)\s*(?:[-*+•]\s*)?(?:\*\*)?Fonte:(?:\*\*)?\s*(?:Fonte:\s*)?([^\n]+)\s*$/i;
+
+function sourceFromAnswer(text: string) {
+  return text.match(SOURCE_FOOTER_PATTERN)?.[1]?.replace(/\*\*$/, '').trim();
+}
+
+function answerWithoutSource(text: string) {
+  return text.replace(SOURCE_FOOTER_PATTERN, '').trimEnd();
+}
+
 function RichText({
   text,
   typing = false,
@@ -152,7 +144,11 @@ function RichText({
     | { type: 'paragraph'; content: string }
     | { type: 'heading'; content: string; level: number }
     | { type: 'quote'; content: string }
-    | { type: 'list'; items: string[]; ordered: boolean };
+    | {
+        type: 'list';
+        items: Array<{ content: string; children: string[] }>;
+        ordered: boolean;
+      };
 
   const blocks: TextBlock[] = [];
   let paragraphLines: string[] = [];
@@ -173,13 +169,12 @@ function RichText({
     const line = rawLine.trimEnd();
     if (!line.trim()) {
       flushParagraph();
-      flushList();
       continue;
     }
 
     const heading = line.match(/^(#{1,3})\s+(.+)$/);
-    const unorderedItem = line.match(/^\s*[-*•]\s+(.+)$/);
-    const orderedItem = line.match(/^\s*\d+[.)]\s+(.+)$/);
+    const unorderedItem = rawLine.match(/^(\s*)([-*+•])\s+(.+)$/);
+    const orderedItem = rawLine.match(/^(\s*)\d+[.)]\s+(.+)$/);
     const quote = line.match(/^>\s?(.+)$/);
 
     if (heading) {
@@ -197,11 +192,27 @@ function RichText({
     if (listItem) {
       flushParagraph();
       const ordered = Boolean(orderedItem);
+      const content = orderedItem ? listItem[2] : listItem[3];
+      const indentation = listItem[1].replace(/\t/g, '  ').length;
+      const nested = Boolean(
+        unorderedItem && (indentation >= 2 || unorderedItem[2] === '+'),
+      );
+
+      if (
+        nested &&
+        activeList &&
+        !activeList.ordered &&
+        activeList.items.length
+      ) {
+        activeList.items.at(-1)?.children.push(content);
+        continue;
+      }
+
       if (!activeList || activeList.ordered !== ordered) {
         flushList();
         activeList = { type: 'list', ordered, items: [] };
       }
-      activeList.items.push(listItem[1]);
+      activeList.items.push({ content, children: [] });
       continue;
     }
 
@@ -214,7 +225,13 @@ function RichText({
 
     if (activeList && /^\s{2,}\S/.test(rawLine)) {
       const lastItem = activeList.items.length - 1;
-      activeList.items[lastItem] += ` ${line.trim()}`;
+      const item = activeList.items[lastItem];
+      const lastChild = item.children.length - 1;
+      if (lastChild >= 0) {
+        item.children[lastChild] += ` ${line.trim()}`;
+      } else {
+        item.content += ` ${line.trim()}`;
+      }
       continue;
     }
 
@@ -281,11 +298,34 @@ function RichText({
               {block.items.map((item, itemIndex) => (
                 <li key={itemIndex}>
                   <span>
-                    {inlineMarkdown(item, `list-${index}-${itemIndex}`)}
+                    {inlineMarkdown(item.content, `list-${index}-${itemIndex}`)}
                     {cursor(
-                      typing && isLast && itemIndex === block.items.length - 1,
+                      typing &&
+                        isLast &&
+                        itemIndex === block.items.length - 1 &&
+                        !item.children.length,
                     )}
                   </span>
+                  {item.children.length > 0 && (
+                    <ul>
+                      {item.children.map((child, childIndex) => (
+                        <li key={childIndex}>
+                          <span>
+                            {inlineMarkdown(
+                              child,
+                              `list-${index}-${itemIndex}-${childIndex}`,
+                            )}
+                            {cursor(
+                              typing &&
+                                isLast &&
+                                itemIndex === block.items.length - 1 &&
+                                childIndex === item.children.length - 1,
+                            )}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
                 </li>
               ))}
             </List>
@@ -733,18 +773,22 @@ export default function AssistantPage() {
                         <span className="text-xs font-extrabold text-[var(--ink)]">
                           {message.role === 'user' ? 'Você' : 'Atlas'}
                         </span>
-                        <span className="truncate text-[11px] text-[var(--muted)]">
-                          {message.role === 'user'
-                            ? 'sua pergunta'
-                            : message.mode}
-                        </span>
+                        {message.role === 'assistant' && (
+                          <span className="truncate text-[11px] text-[var(--muted)]">
+                            {message.mode}
+                          </span>
+                        )}
                       </div>
                       <div
                         data-role={message.role}
                         className="atlas-chat-bubble min-w-0 max-w-full px-4 py-3.5 sm:px-5 sm:py-4"
                       >
                         <RichText
-                          text={message.text}
+                          text={
+                            message.role === 'assistant'
+                              ? answerWithoutSource(message.text)
+                              : message.text
+                          }
                           typing={message.id === streamingMessageId}
                         />
                         {message.visualization && (
@@ -764,15 +808,19 @@ export default function AssistantPage() {
                           </figure>
                         )}
                       </div>
-                      {message.role === 'assistant' && message.source && (
-                        <p className="mt-2 flex max-w-full items-center gap-1.5 px-1 text-[11px] leading-relaxed text-[var(--muted)]">
-                          <Database
-                            size={12}
-                            className="shrink-0 text-[var(--teal)]"
-                          />
-                          <span>{message.source}</span>
-                        </p>
-                      )}
+                      {message.role === 'assistant' &&
+                        message.engine !== 'system' &&
+                        (sourceFromAnswer(message.text) ?? message.source) && (
+                          <p className="mt-2 flex max-w-full items-center gap-1.5 px-1 text-[11px] leading-relaxed text-[var(--muted)]">
+                            <Database
+                              size={12}
+                              className="shrink-0 text-[var(--teal)]"
+                            />
+                            <span>
+                              {sourceFromAnswer(message.text) ?? message.source}
+                            </span>
+                          </p>
+                        )}
                     </div>
                     {message.role === 'user' && (
                       <div className="grid size-9 shrink-0 place-items-center rounded-full border border-[color-mix(in_srgb,var(--navy)_78%,white)] bg-[var(--navy)] text-[var(--primary-foreground)] shadow-[0_4px_12px_rgb(18_47_56/10%)] sm:size-10">

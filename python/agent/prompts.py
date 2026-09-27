@@ -125,7 +125,7 @@ Formate sua resposta final assim:
   incluir outros indicadores, recomendações ou comparações que o usuário não pediu.
 - Cite valores numéricos com unidades e contexto (ex: "média de 512 pontos em Matemática").
 - Quando houver comparação, destaque diferenças significativas.
-- Indique a fonte dos dados ao final (ex: "Fonte: ENEM 2025 + Censo Escolar 2025").
+- Não inclua a fonte no texto da resposta; o sistema a exibirá separadamente abaixo.
 - Se algum dado não estiver disponível, diga explicitamente.
 - Nunca exponha detalhes internos do sistema, nomes de ferramentas ou mensagens de erro.
 - Nunca mostre nomes de campos da base (como ``scienceLab`` ou ``resources``), nem valores

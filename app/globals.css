@@ -417,7 +417,7 @@ textarea,
   gap: 0.55rem;
 }
 
-.atlas-rich-text ul > li::before {
+.atlas-rich-text > ul > li::before {
   width: 0.42rem;
   height: 0.42rem;
   margin: 0.68rem auto 0;
@@ -425,6 +425,19 @@ textarea,
   background: var(--teal);
   box-shadow: 0 0 0 4px var(--teal-soft);
   content: '';
+}
+
+.atlas-rich-text ul ul {
+  grid-column: 2;
+  padding-left: 0.65rem;
+}
+
+.atlas-rich-text ul ul > li::before {
+  color: var(--teal);
+  content: '—';
+  font-weight: 800;
+  line-height: 1.75;
+  text-align: center;
 }
 
 .atlas-rich-text ol {
@@ -470,9 +483,13 @@ textarea,
   color: inherit;
 }
 
-.atlas-chat-bubble[data-role='user'] .atlas-rich-text ul > li::before {
+.atlas-chat-bubble[data-role='user'] .atlas-rich-text > ul > li::before {
   background: #fff;
   box-shadow: 0 0 0 4px rgb(255 255 255 / 15%);
+}
+
+.atlas-chat-bubble[data-role='user'] .atlas-rich-text ul ul > li::before {
+  color: #fff;
 }
 
 .atlas-chat-bubble[data-role='user'] .atlas-rich-text ol > li::before,

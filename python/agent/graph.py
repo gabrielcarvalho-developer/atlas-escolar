@@ -1,4 +1,5 @@
 """LangGraph plan/execute/reflect agent for Atlas Escolar."""
+
 from __future__ import annotations
 
 import json
@@ -28,9 +29,7 @@ load_dotenv(PYTHON_DIR / ".env.local")
 
 logger = logging.getLogger("atlas-agent")
 
-REPLAN_PATTERN = re.compile(
-    r"(?im)^\s*(?:#{1,6}\s*)?(?:\*\*)?REPLAN:\s*(?P<reason>[^\r\n]*)"
-)
+REPLAN_PATTERN = re.compile(r"(?im)^\s*(?:#{1,6}\s*)?(?:\*\*)?REPLAN:\s*(?P<reason>[^\r\n]*)")
 INTERNAL_LANGUAGE_PATTERN = re.compile(
     r"(?i)(?:\bMCP\b|\bLangGraph\b|\bPlanner\b|\bReflector\b|"
     r"\bREPLAN\b|\bcompare_schools\b|\bget_[a-z_]+\b|"
@@ -81,6 +80,7 @@ RESOURCE_KEY_PATTERN = re.compile(
     r"\s*\((?:" + "|".join([*RESOURCE_BOOLEAN_LABELS, *RESOURCE_COUNT_LABELS]) + r")\)",
     re.IGNORECASE,
 )
+
 
 def _required_env(name: str) -> str:
     value = os.environ.get(name, "").strip()
@@ -345,9 +345,7 @@ def _collapse_repeated_blocks(answer: str) -> str:
     return "\n\n".join(kept).strip()
 
 
-def _grounded_resource_answer(
-    question: str, evidence: list[dict[str, Any]]
-) -> str | None:
+def _grounded_resource_answer(question: str, evidence: list[dict[str, Any]]) -> str | None:
     """Formata perguntas sobre recursos diretamente da evidência escolar do MCP."""
     asks_for_missing = _asks_for_missing_resources(question)
     requested_keys = _requested_resource_keys(question)
@@ -367,7 +365,6 @@ def _grounded_resource_answer(
         return None
 
     resources = profile["resources"]
-    source = profile.get("source")
 
     if not asks_for_missing:
         statements = []
@@ -384,9 +381,7 @@ def _grounded_resource_answer(
                         f"Não. Nos dados disponíveis, não há registro de {label} nessa escola."
                     )
             elif isinstance(value, (int, float)) and not isinstance(value, bool):
-                display_label = (
-                    RESOURCE_COUNT_SINGULAR_LABELS[key] if value == 1 else label
-                )
+                display_label = RESOURCE_COUNT_SINGULAR_LABELS[key] if value == 1 else label
                 if value == 0:
                     statements.append(
                         f"Nos dados disponíveis, não há {label} registrados nessa escola."
@@ -396,15 +391,10 @@ def _grounded_resource_answer(
 
         if not statements:
             return None
-        sections = [" ".join(statements)]
-        if isinstance(source, str) and source:
-            sections.append(f"Fonte: {source}")
-        return "\n\n".join(sections)
+        return " ".join(statements)
 
     missing = [
-        label
-        for key, label in RESOURCE_BOOLEAN_LABELS.items()
-        if resources.get(key) is False
+        label for key, label in RESOURCE_BOOLEAN_LABELS.items() if resources.get(key) is False
     ]
     zero_counts = [
         label
@@ -414,13 +404,14 @@ def _grounded_resource_answer(
     school_name = str(profile.get("name", "a escola"))
 
     sections = [
-        f'Na base consultada, a escola **{school_name}** apresenta as informações a seguir.'
+        f"Na base consultada, a escola **{school_name}** apresenta as informações a seguir."
     ]
     if missing:
-        missing_title = "Recurso não registrado" if len(missing) == 1 else "Recursos não registrados"
+        missing_title = (
+            "Recurso não registrado" if len(missing) == 1 else "Recursos não registrados"
+        )
         sections.append(
-            f"**{missing_title}**\n\n"
-            + "\n".join(f"- {label.capitalize()}" for label in missing)
+            f"**{missing_title}**\n\n" + "\n".join(f"- {label.capitalize()}" for label in missing)
         )
     else:
         sections.append("Não há recursos booleanos marcados como ausentes.")
@@ -431,8 +422,6 @@ def _grounded_resource_answer(
             + "\n\nEsses valores indicam quantidades registradas na base."
         )
 
-    if isinstance(source, str) and source:
-        sections.append(f"Fonte: {source}")
     return "\n\n".join(sections)
 
 
@@ -499,8 +488,7 @@ def _focus_result(result: dict[str, Any], focus: str) -> dict[str, Any]:
     history = focused.get("history")
     if isinstance(history, list):
         focused["history"] = [
-            _focus_result(point, focus) if isinstance(point, dict) else point
-            for point in history
+            _focus_result(point, focus) if isinstance(point, dict) else point for point in history
         ]
 
     comparison = focused.get("comparisonWithPrevious")
@@ -518,9 +506,7 @@ def _focus_result(result: dict[str, Any], focus: str) -> dict[str, Any]:
     return focused
 
 
-def _focused_evidence(
-    question: str, evidence: list[dict[str, Any]]
-) -> list[dict[str, Any]]:
+def _focused_evidence(question: str, evidence: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Entrega ao redator apenas o domínio pedido quando o recorte é inequívoco."""
     focus = _question_data_focus(question)
     if focus is None:
@@ -541,16 +527,18 @@ def _focused_evidence(
     return focused_evidence
 
 
-def _normalize_plan_for_context(
-    steps: list[PlanStep], state: AgentState
-) -> list[PlanStep]:
+def _normalize_plan_for_context(steps: list[PlanStep], state: AgentState) -> list[PlanStep]:
     """Corrige comparações escola-município e bloqueia compare_schools inválido."""
     selected_year = state.selection.get("year")
     selected_saeb_year = state.selection.get("saebYear")
     if (
-        _asks_for_missing_resources(state.question)
-        or _asks_direct_resource_question(state.question)
-    ) and state.school_code and steps:
+        (
+            _asks_for_missing_resources(state.question)
+            or _asks_direct_resource_question(state.question)
+        )
+        and state.school_code
+        and steps
+    ):
         arguments: dict[str, Any] = {"school_code": state.school_code}
         if isinstance(selected_year, int):
             arguments["year"] = selected_year
@@ -569,9 +557,7 @@ def _normalize_plan_for_context(
         ]
 
     question = state.question.casefold()
-    asks_for_municipality = any(
-        term in question for term in ("município", "municipio", "cidade")
-    )
+    asks_for_municipality = any(term in question for term in ("município", "municipio", "cidade"))
     asks_for_comparison = any(
         term in question for term in ("compare", "comparar", "comparação", "comparacao")
     )
@@ -670,9 +656,7 @@ def _normalize_plan_for_context(
                 and "year" not in arguments
             ):
                 arguments["year"] = selected_saeb_year
-            year_aware_calls.append(
-                tool_call.model_copy(update={"arguments": arguments})
-            )
+            year_aware_calls.append(tool_call.model_copy(update={"arguments": arguments}))
 
         valid_calls = []
         for tool_call in year_aware_calls:
@@ -717,9 +701,7 @@ def _is_valid_tool_call(tool_call: ToolCall) -> bool:
             return False
         if scope == "state":
             return True
-        return scope == "municipality" and bool(
-            str(arguments.get("municipality_name", "")).strip()
-        )
+        return scope == "municipality" and bool(str(arguments.get("municipality_name", "")).strip())
     return name in {
         "get_state_metrics",
         "get_saeb_state_context",
@@ -746,8 +728,7 @@ async def planner_node(state: AgentState) -> dict[str, Any]:
         context_parts.append(f"Escola selecionada na interface (codigo INEP): {state.school_code}")
     if state.selection:
         context_parts.append(
-            "Filtros selecionados na interface: "
-            + json.dumps(state.selection, ensure_ascii=False)
+            "Filtros selecionados na interface: " + json.dumps(state.selection, ensure_ascii=False)
         )
     if history_context:
         context_parts.append(f"Historico recente:\n{history_context}")
@@ -756,10 +737,12 @@ async def planner_node(state: AgentState) -> dict[str, Any]:
     context_parts.append(f"Pergunta atual: {state.question}")
     user_message = "\n\n".join(context_parts)
 
-    response = await llm.ainvoke([
-        SystemMessage(content=PLANNER_SYSTEM_PROMPT),
-        HumanMessage(content=user_message),
-    ])
+    response = await llm.ainvoke(
+        [
+            SystemMessage(content=PLANNER_SYSTEM_PROMPT),
+            HumanMessage(content=user_message),
+        ]
+    )
 
     try:
         parsed = _parse_json_response(response.content)
@@ -815,8 +798,7 @@ async def executor_node(state: AgentState) -> dict[str, Any]:
         missing_tools = REQUIRED_TOOLS - available_tools
         if missing_tools:
             raise MCPToolError(
-                "Servidor MCP sem ferramentas obrigatorias: "
-                + ", ".join(sorted(missing_tools))
+                "Servidor MCP sem ferramentas obrigatorias: " + ", ".join(sorted(missing_tools))
             )
 
         for i, step in enumerate(updated_plan):
@@ -876,10 +858,12 @@ Iteração atual: {state.iteration}/{state.max_iterations}
 {ANSWER_FORMAT_INSTRUCTIONS}
 """
 
-    response = await llm.ainvoke([
-        SystemMessage(content=REFLECTOR_SYSTEM_PROMPT),
-        HumanMessage(content=prompt),
-    ])
+    response = await llm.ainvoke(
+        [
+            SystemMessage(content=REFLECTOR_SYSTEM_PROMPT),
+            HumanMessage(content=prompt),
+        ]
+    )
 
     return _interpret_reflector_output(
         _message_text(response.content),
@@ -1045,10 +1029,9 @@ async def run_agent(
         if not answer:
             raise RuntimeError("O agente terminou sem produzir uma resposta.")
         sources = _evidence_sources(final_state.evidence)
-        if sources and "fonte:" not in answer.lower():
-            answer = f"{answer}\n\nFonte: {'; '.join(sources)}"
         return {
             "answer": answer,
+            "source": "; ".join(sources) if sources else "Atlas Escolar",
             "iterations": final_state.iteration,
             "evidence_count": len(final_state.evidence),
             "engine": "mcp-langgraph",

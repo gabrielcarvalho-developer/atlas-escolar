@@ -131,9 +131,7 @@ async def test_team_rag_returns_grounded_metadata_without_running_mcp(monkeypatc
 
 async def test_mcp_tool_returns_real_school_data() -> None:
     async with Client(mcp, read_timeout_seconds=5) as client:
-        raw_result = await client.call_tool(
-            "get_school_profile", {"school_code": "21288780"}
-        )
+        raw_result = await client.call_tool("get_school_profile", {"school_code": "21288780"})
 
     result = decode_tool_result(raw_result)
     assert result["code"] == "21288780"
@@ -233,16 +231,12 @@ def test_cloudflare_account_url_is_normalized() -> None:
 
 
 def test_model_json_parser_ignores_trailing_explanation() -> None:
-    assert _parse_json_response('{"is_complete": true}\nExplicacao extra') == {
-        "is_complete": True
-    }
+    assert _parse_json_response('{"is_complete": true}\nExplicacao extra') == {"is_complete": True}
 
 
 def test_reflector_accepts_multiline_markdown_without_json() -> None:
     markdown = "Análise rápida:\n\n- Indicador: **7,5/10**\n- Fonte auditável"
-    result = _interpret_reflector_output(
-        markdown, iteration=1, max_iterations=3, evidence=[]
-    )
+    result = _interpret_reflector_output(markdown, iteration=1, max_iterations=3, evidence=[])
 
     assert result["is_complete"] is True
     assert result["final_answer"] == markdown
@@ -378,9 +372,7 @@ def test_school_municipality_comparison_is_normalized_to_valid_calls() -> None:
         "get_school_profile",
         "get_municipality_metrics",
     ]
-    assert normalized[0].tool_calls[1].arguments == {
-        "municipality_name": "Coelho Neto"
-    }
+    assert normalized[0].tool_calls[1].arguments == {"municipality_name": "Coelho Neto"}
 
 
 def test_invalid_tool_arguments_are_removed_before_execution() -> None:
@@ -410,9 +402,7 @@ def test_invalid_tool_arguments_are_removed_before_execution() -> None:
 
     normalized = _normalize_plan_for_context(steps, state)
 
-    assert [call.tool_name for call in normalized[0].tool_calls] == [
-        "get_school_profile"
-    ]
+    assert [call.tool_name for call in normalized[0].tool_calls] == ["get_school_profile"]
 
 
 def test_single_school_question_replaces_invalid_comparison() -> None:
@@ -441,9 +431,7 @@ def test_single_school_question_replaces_invalid_comparison() -> None:
 
     normalized = _normalize_plan_for_context(steps, state)
 
-    assert [call.tool_name for call in normalized[0].tool_calls] == [
-        "get_school_profile"
-    ]
+    assert [call.tool_name for call in normalized[0].tool_calls] == ["get_school_profile"]
 
 
 def test_repeated_answer_blocks_are_truncated_before_the_loop() -> None:
@@ -523,13 +511,10 @@ def test_direct_resource_answer_is_short_natural_and_scoped() -> None:
         }
     ]
 
-    answer = _grounded_resource_answer(
-        "A escola tem laboratório de ciências?", evidence
-    )
+    answer = _grounded_resource_answer("A escola tem laboratório de ciências?", evidence)
 
     assert answer == (
         "Não. Nos dados disponíveis, não há registro de laboratório de ciências nessa escola."
-        "\n\nFonte: ENEM 2025 + Censo Escolar 2025"
     )
     assert "scienceLab" not in answer
     assert "false" not in answer.casefold()
@@ -558,12 +543,8 @@ def test_direct_resource_answer_handles_positive_and_count_questions() -> None:
         }
     ]
 
-    internet_answer = _grounded_resource_answer(
-        "A escola possui internet para alunos?", evidence
-    )
-    rooms_answer = _grounded_resource_answer(
-        "Quantas salas climatizadas a escola tem?", evidence
-    )
+    internet_answer = _grounded_resource_answer("A escola possui internet para alunos?", evidence)
+    rooms_answer = _grounded_resource_answer("Quantas salas climatizadas a escola tem?", evidence)
 
     assert internet_answer == "Sim. A escola possui acesso à internet para alunos."
     assert rooms_answer == "A escola tem 12 salas climatizadas."
@@ -587,10 +568,7 @@ def test_library_answer_uses_the_same_combined_indicator_as_the_dashboard() -> N
 
     answer = _grounded_resource_answer("A escola tem biblioteca?", evidence)
 
-    assert answer == (
-        "Sim. A escola possui biblioteca ou sala de leitura."
-        "\n\nFonte: Censo Escolar 2025"
-    )
+    assert answer == "Sim. A escola possui biblioteca ou sala de leitura."
 
 
 def test_direct_resource_question_normalizes_plan_to_school_profile() -> None:
