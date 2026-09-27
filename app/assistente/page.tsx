@@ -586,9 +586,9 @@ export default function AssistantPage() {
                     size="icon"
                     disabled={!draft.trim() || loading}
                     aria-label="Enviar pergunta"
-                    className="size-11 shrink-0 rounded-full bg-[var(--teal)] text-white shadow-sm hover:bg-[var(--teal-strong)]"
+                    className="size-11 shrink-0 rounded-full bg-transparent text-[var(--teal)] shadow-none hover:bg-transparent hover:text-[var(--teal-strong)]"
                   >
-                    <SendHorizontal size={18} />
+                    <SendHorizontal className="size-6" />
                   </Button>
                 </div>
                 <p className="mt-2 px-1 text-center text-[11px] leading-relaxed text-[var(--muted)]">
