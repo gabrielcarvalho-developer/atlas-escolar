@@ -92,11 +92,12 @@ TEAM_NAMES = (
     "luciely beatriz",
     "larissa thauana",
     "erick",
-    "macgregor",
+    "gabriel",
     "william",
     "mairron",
-    "lorran",
+    "marcelo",
     "luciely",
+    "larissa",
 )
 
 ANAPHORIC_TERMS = (
