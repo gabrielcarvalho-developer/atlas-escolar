@@ -1,11 +1,8 @@
 import { NextResponse } from 'next/server';
-import {
-  answerQuestionLocally,
-  buildAssistantGrounding,
-  type AssistantConversationTurn,
-  type AssistantSelection,
+import type {
+  AssistantConversationTurn,
+  AssistantSelection,
 } from '@/lib/assistant';
-import { buildSchoolContext, SCHOOLS } from '@/lib/atlas-data';
 
 type AssistantRequest = {
   question?: unknown;
@@ -14,25 +11,14 @@ type AssistantRequest = {
   selection?: unknown;
 };
 
-function endpointFrom(base: string) {
-  const normalized = base.replace(/\/$/, '');
-  if (normalized.endsWith('/chat/completions')) return normalized;
-
-  try {
-    const url = new URL(normalized);
-    if (
-      url.hostname === 'api.cloudflare.com' &&
-      /^\/client\/v4\/accounts\/[^/]+$/.test(url.pathname)
-    ) {
-      url.pathname = `${url.pathname}/ai/v1/chat/completions`;
-      return url.toString();
-    }
-  } catch {
-    // O fetch produzirá o erro apropriado para URLs inválidas.
-  }
-
-  return `${normalized}/chat/completions`;
-}
+type AgentPayload = {
+  answer?: unknown;
+  engine?: unknown;
+  mode?: unknown;
+  iterations?: unknown;
+  evidence_count?: unknown;
+  error?: unknown;
+};
 
 function parseHistory(value: unknown): AssistantConversationTurn[] {
   if (!Array.isArray(value)) return [];
@@ -57,18 +43,32 @@ function parseSelection(value: unknown): AssistantSelection {
   )
     ? (candidate.analysisLevel as AssistantSelection['analysisLevel'])
     : undefined;
+
   return {
     analysisLevel,
     municipality:
       typeof candidate.municipality === 'string'
-        ? candidate.municipality
+        ? candidate.municipality.slice(0, 120)
         : undefined,
     comparisonMunicipality:
       typeof candidate.comparisonMunicipality === 'string'
-        ? candidate.comparisonMunicipality
+        ? candidate.comparisonMunicipality.slice(0, 120)
         : undefined,
     compareMunicipalities: candidate.compareMunicipalities === true,
   };
+}
+
+function agentEndpoint(baseUrl: string) {
+  const normalized = baseUrl.replace(/\/+$/, '');
+  return normalized.endsWith('/api/agent')
+    ? normalized
+    : `${normalized}/api/agent`;
+}
+
+function agentTimeout() {
+  const configured = Number(process.env.ATLAS_AGENT_TIMEOUT_MS ?? 90_000);
+  if (!Number.isFinite(configured)) return 90_000;
+  return Math.min(Math.max(configured, 5_000), 180_000);
 }
 
 export async function POST(request: Request) {
@@ -84,98 +84,91 @@ export async function POST(request: Request) {
 
   const question =
     typeof body.question === 'string' ? body.question.trim() : '';
-  const schoolCode = typeof body.schoolCode === 'string' ? body.schoolCode : '';
-  if (
-    !question ||
-    question.length > 2_000 ||
-    !SCHOOLS.some((school) => school.code === schoolCode)
-  ) {
+  const schoolCode =
+    typeof body.schoolCode === 'string' ? body.schoolCode.trim() : '';
+  if (!question || question.length > 2_000 || !/^\d{8}$/.test(schoolCode)) {
     return NextResponse.json(
       { error: 'Pergunta ou código de escola inválido.' },
       { status: 400 },
     );
   }
 
-  const history = parseHistory(body.history);
-  const selection = parseSelection(body.selection);
-  const context = buildSchoolContext(schoolCode, true);
-  const localAnswer = answerQuestionLocally(
-    question,
-    context,
-    history,
-    selection,
-  );
-  const apiUrl = process.env.LLAMA_API_URL;
-  const apiKey = process.env.LLAMA_API_KEY;
-  const model = process.env.LLAMA_MODEL;
-
-  if (!apiUrl || !apiKey || !model) {
-    return NextResponse.json(localAnswer);
+  const agentUrl = process.env.ATLAS_AGENT_URL?.trim();
+  if (!agentUrl) {
+    console.error('ATLAS_AGENT_URL não está configurada.');
+    return NextResponse.json(
+      { error: 'Assistente MCP não configurado.' },
+      { status: 503 },
+    );
   }
 
-  const grounding = buildAssistantGrounding(
-    context,
-    question,
-    history,
-    selection,
-  );
+  const history = parseHistory(body.history);
+  const selection = parseSelection(body.selection);
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 20_000);
+  const timeout = setTimeout(() => controller.abort(), agentTimeout());
 
   try {
-    const response = await fetch(endpointFrom(apiUrl), {
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+    };
+    const agentToken = process.env.ATLAS_AGENT_TOKEN?.trim();
+    if (agentToken) headers.Authorization = `Bearer ${agentToken}`;
+
+    const response = await fetch(agentEndpoint(agentUrl), {
       method: 'POST',
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-      },
+      headers,
       body: JSON.stringify({
-        model,
-        temperature: 0,
-        max_tokens: 800,
-        messages: [
-          {
-            role: 'system',
-            content:
-              'Você é o Assistente Atlas Escolar. Responda em português brasileiro somente com base nas evidências fornecidas. Considere o histórico para entender referências como “lá”, “nesse município” ou perguntas de continuação. Para preservar a auditabilidade, devolva exatamente a RESPOSTA AUDITÁVEL DE REFERÊNCIA, sem alterar números, entidades, ressalvas ou fontes. Preserve o Markdown simples.',
-          },
-          ...history.map((turn) => ({
-            role: turn.role,
-            content: turn.text,
-          })),
-          {
-            role: 'user',
-            content: [
-              `PERGUNTA ATUAL:\n${question}`,
-              `RESPOSTA AUDITÁVEL DE REFERÊNCIA (modo: ${localAnswer.mode}):\n${localAnswer.text}`,
-              `EVIDÊNCIAS E RESSALVAS:\n${JSON.stringify(grounding)}`,
-            ].join('\n\n'),
-          },
-        ],
+        question,
+        history: history.map((turn) => ({
+          role: turn.role,
+          content: turn.text,
+        })),
+        school_code: schoolCode,
+        selection,
       }),
+      cache: 'no-store',
       signal: controller.signal,
     });
+
     if (!response.ok) {
-      throw new Error(`Llama respondeu com status ${response.status}`);
+      console.error(`Agente MCP respondeu com status ${response.status}.`);
+      return NextResponse.json(
+        { error: 'O agente MCP está temporariamente indisponível.' },
+        { status: 502 },
+      );
     }
-    const payload = (await response.json()) as {
-      choices?: Array<{ message?: { content?: string } }>;
-    };
-    const text = payload.choices?.[0]?.message?.content?.trim();
-    if (!text) throw new Error('Resposta vazia do Llama.');
-    if (text !== localAnswer.text.trim()) {
-      return NextResponse.json(localAnswer);
+
+    const payload = (await response.json()) as AgentPayload;
+    if (typeof payload.answer !== 'string' || !payload.answer.trim()) {
+      console.error('Agente MCP retornou uma resposta vazia ou inválida.');
+      return NextResponse.json(
+        { error: 'O agente MCP retornou uma resposta inválida.' },
+        { status: 502 },
+      );
     }
 
     return NextResponse.json({
-      ...localAnswer,
-      text,
-      mode: 'IA + evidências estruturadas',
-      engine: 'llama',
+      text: payload.answer.trim(),
+      source: 'Atlas Escolar',
+      mode:
+        typeof payload.mode === 'string'
+          ? payload.mode
+          : 'Consulta aos dados do Atlas',
+      engine:
+        typeof payload.engine === 'string' ? payload.engine : 'mcp-langgraph',
+      iterations:
+        typeof payload.iterations === 'number' ? payload.iterations : undefined,
+      evidenceCount:
+        typeof payload.evidence_count === 'number'
+          ? payload.evidence_count
+          : undefined,
     });
   } catch (error) {
-    console.error('Falha no provedor Llama; usando resposta local.', error);
-    return NextResponse.json(localAnswer);
+    console.error('Falha na comunicação com o agente MCP.', error);
+    return NextResponse.json(
+      { error: 'Não foi possível acessar o agente MCP.' },
+      { status: 502 },
+    );
   } finally {
     clearTimeout(timeout);
   }

@@ -25,36 +25,49 @@ Critérios de aceite atuais: 10.080 escolas públicas, 217 municípios, 925 esco
 
 Ao substituir uma entrega, preserve os nomes dos arquivos e atualize o dicionário JSON com os novos hashes, esquemas, contagens e regras. O build falha se os dados divergirem da documentação.
 
-## Assistente com Llama
+## Assistente via MCP
 
-O endpoint `POST /api/assistant` aceita a pergunta e o `CO_ESCOLA`, monta um recorte estruturado da evidência e consulta qualquer provedor Llama compatível com a API de chat da OpenAI. Copie `.env.example` para `.env.local` e configure:
+O assistente usa um único fluxo: `Next.js -> API Python/LangGraph -> MCP -> dados`. Não há resposta Llama direta nem fallback determinístico no Next.js. Se a API ou o MCP estiverem indisponíveis, a interface informa a indisponibilidade em vez de gerar uma resposta por outro mecanismo.
 
-```dotenv
-LLAMA_API_URL=https://seu-provedor/v1
-LLAMA_API_KEY=seu-segredo
-LLAMA_MODEL=identificador-do-modelo
-```
+O servidor MCP expõe oito ferramentas auditáveis e é iniciado por `stdio` pela API Python. Para produção, `MCP_SERVER_URL` permite trocar o subprocesso local por um endpoint MCP Streamable HTTP sem alterar o agente.
 
-Também é aceita diretamente a URL-base da conta do Cloudflare Workers AI (`https://api.cloudflare.com/client/v4/accounts/{id}`); o Atlas acrescenta o caminho OpenAI-compatible automaticamente.
+Copie `python/.env.example` para `python/.env.local`, escolha `LLM_PROVIDER` e preencha somente as credenciais do provedor escolhido. Para Cloudflare Workers AI, a URL curta da conta (`https://api.cloudflare.com/client/v4/accounts/{id}`) é normalizada automaticamente para a API OpenAI-compatible.
 
-Sem essas três variáveis, o produto continua operacional em modo local auditável, com respostas determinísticas baseadas nos mesmos dados. A chave nunca é enviada ao navegador.
+As credenciais do modelo ficam somente na API Python e nunca são enviadas ao navegador. Sem a configuração válida do agente, a interface falha explicitamente e não troca silenciosamente de motor.
 
 ## Executar localmente
 
 ```bash
 npm install
+python -m venv python/.venv
+.\python\.venv\Scripts\Activate.ps1
+python -m pip install -e "./python[dev]"
+```
+
+Ative o ambiente virtual e inicie os serviços em dois terminais:
+
+```bash
+# terminal 1 (com o ambiente virtual ativo)
+npm run dev:agent
+
+# terminal 2
 npm run dev
 ```
 
-A aplicação Vinext fica em `http://localhost:3001`. Para comparar a implementação no runtime original do Next.js, use `npm run dev:next`.
+Configure `ATLAS_AGENT_URL=http://localhost:8001` no `.env.local` da raiz. A aplicação Vinext fica em `http://localhost:3001` e a prontidão do agente pode ser verificada em `http://localhost:8001/health`. Para comparar a implementação no runtime original do Next.js, use `npm run dev:next`.
+
+Em produção, publique a API Python em um runtime próprio, configure a URL HTTPS em `ATLAS_AGENT_URL` e use o mesmo segredo forte em `ATLAS_AGENT_TOKEN` nos dois serviços. Se o MCP também for remoto, configure o endpoint Streamable HTTP completo em `MCP_SERVER_URL`.
 
 ## Verificações
+
+Com o ambiente virtual Python ativo:
 
 ```bash
 npm run data:build
 npm run lint
 npm run build
 npm run build:next
+npm run check:agent
 ```
 
 ## Limites metodológicos
@@ -71,6 +84,6 @@ npm run build:next
 - filtros por código oficial de estado, município e escola;
 - comparação com agregados municipais;
 - infraestrutura, ENEM 2025 e contexto estadual SAEB 2023;
-- assistente Llama com resposta local de contingência e fontes visíveis;
+- assistente LangGraph com acesso exclusivo às ferramentas de dados via MCP;
 - plano de ação e relatório PDF baseados no contexto selecionado;
 - ferramenta WebMCP para selecionar a escola por `CO_ESCOLA`.

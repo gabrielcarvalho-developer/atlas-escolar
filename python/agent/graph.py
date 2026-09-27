@@ -1,0 +1,512 @@
+"""LangGraph plan/execute/reflect agent for Atlas Escolar."""
+from __future__ import annotations
+
+import json
+import logging
+import os
+import re
+from pathlib import Path
+from typing import Any
+
+from dotenv import load_dotenv
+from langchain_core.messages import HumanMessage, SystemMessage
+from langgraph.graph import END, StateGraph
+
+from agent.mcp_client import REQUIRED_TOOLS, MCPToolError, create_mcp_client, decode_tool_result
+from agent.prompts import (
+    ANSWER_FORMAT_INSTRUCTIONS,
+    PLANNER_SYSTEM_PROMPT,
+    REFLECTOR_SYSTEM_PROMPT,
+)
+from agent.state import AgentState, PlanStep, ToolCall
+
+PYTHON_DIR = Path(__file__).resolve().parent.parent
+load_dotenv(PYTHON_DIR / ".env.local")
+
+logger = logging.getLogger("atlas-agent")
+
+REPLAN_PATTERN = re.compile(
+    r"(?im)^\s*(?:#{1,6}\s*)?(?:\*\*)?REPLAN:\s*(?P<reason>[^\r\n]*)"
+)
+INTERNAL_LANGUAGE_PATTERN = re.compile(
+    r"(?i)(?:\bMCP\b|\bLangGraph\b|\bPlanner\b|\bReflector\b|"
+    r"\bREPLAN\b|\bcompare_schools\b|\bget_[a-z_]+\b|"
+    r"campo\s+[\"']?error[\"']?)"
+)
+
+def _required_env(name: str) -> str:
+    value = os.environ.get(name, "").strip()
+    if not value:
+        raise RuntimeError(f"Variavel obrigatoria ausente: {name}")
+    return value
+
+
+def _openai_compatible_base_url(raw_url: str) -> str:
+    """Normaliza URLs base, inclusive a forma curta de conta da Cloudflare."""
+    base_url = raw_url.rstrip("/")
+    base_url = re.sub(r"/chat/completions$", "", base_url)
+    if re.match(r"^https://api\.cloudflare\.com/client/v4/accounts/[^/]+$", base_url):
+        return f"{base_url}/ai/v1"
+    return base_url
+
+
+def _get_llm() -> Any:
+    """Create LLM instance based on configured provider."""
+    provider = os.environ.get("LLM_PROVIDER", "openai").lower()
+
+    if provider == "anthropic":
+        from langchain_anthropic import ChatAnthropic
+
+        return ChatAnthropic(
+            model=os.environ.get("ANTHROPIC_MODEL", "claude-sonnet-4-20250514"),
+            api_key=_required_env("ANTHROPIC_API_KEY"),
+            temperature=0,
+            max_tokens=1200,
+            max_retries=1,
+        )
+    if provider == "llama":
+        from langchain_openai import ChatOpenAI
+
+        return ChatOpenAI(
+            model=_required_env("LLAMA_MODEL"),
+            api_key=_required_env("LLAMA_API_KEY"),
+            base_url=_openai_compatible_base_url(_required_env("LLAMA_API_URL")),
+            temperature=0,
+            max_tokens=1200,
+            max_retries=1,
+        )
+    if provider == "openai":
+        from langchain_openai import ChatOpenAI
+
+        return ChatOpenAI(
+            model=os.environ.get("OPENAI_MODEL", "gpt-4o"),
+            api_key=_required_env("OPENAI_API_KEY"),
+            temperature=0,
+            max_tokens=1200,
+            max_retries=1,
+        )
+    raise RuntimeError(f"LLM_PROVIDER nao suportado: {provider}")
+
+
+def _message_text(content: Any) -> str:
+    if isinstance(content, str):
+        return content.strip()
+    if isinstance(content, list):
+        parts = [item.get("text", "") for item in content if isinstance(item, dict)]
+        return "".join(parts).strip()
+    return str(content).strip()
+
+
+def _parse_json_response(content: Any) -> dict[str, Any]:
+    text = _message_text(content)
+    if text.startswith("```"):
+        text = text.split("\n", 1)[1].rsplit("```", 1)[0]
+    object_start = text.find("{")
+    if object_start < 0:
+        raise ValueError("A resposta do modelo nao contem um objeto JSON.")
+    decoded, _ = json.JSONDecoder().raw_decode(text, object_start)
+    if not isinstance(decoded, dict):
+        raise ValueError("A resposta do modelo nao e um objeto JSON.")
+    return decoded
+
+
+def _normalize_plan_for_context(
+    steps: list[PlanStep], state: AgentState
+) -> list[PlanStep]:
+    """Corrige comparações escola-município e bloqueia compare_schools inválido."""
+    question = state.question.casefold()
+    asks_for_municipality = any(
+        term in question for term in ("município", "municipio", "cidade")
+    )
+    municipality = state.selection.get("municipality")
+    can_compare_with_municipality = (
+        asks_for_municipality
+        and bool(state.school_code)
+        and isinstance(municipality, str)
+        and bool(municipality.strip())
+    )
+
+    normalized_steps: list[PlanStep] = []
+    for step in steps:
+        calls: list[ToolCall] = []
+        for tool_call in step.tool_calls:
+            if tool_call.tool_name != "compare_schools":
+                calls.append(tool_call)
+                continue
+
+            school_codes = tool_call.arguments.get("school_codes")
+            if isinstance(school_codes, list) and 2 <= len(school_codes) <= 5:
+                calls.append(tool_call)
+                continue
+
+            if not can_compare_with_municipality:
+                raise ValueError("compare_schools exige de 2 a 5 códigos de escola.")
+
+            logger.warning(
+                "Planner selected compare_schools for a school-municipality comparison; "
+                "normalizing the plan."
+            )
+            calls.extend(
+                [
+                    ToolCall(
+                        tool_name="get_school_profile",
+                        arguments={"school_code": state.school_code},
+                        step_id=step.id,
+                    ),
+                    ToolCall(
+                        tool_name="get_municipality_metrics",
+                        arguments={"municipality_name": municipality.strip()},
+                        step_id=step.id,
+                    ),
+                ]
+            )
+        valid_calls = []
+        for tool_call in calls:
+            if _is_valid_tool_call(tool_call):
+                valid_calls.append(tool_call)
+            else:
+                logger.warning(
+                    "Planner produced invalid arguments for %s; dropping the call.",
+                    tool_call.tool_name,
+                )
+        normalized_steps.append(step.model_copy(update={"tool_calls": valid_calls}))
+    return normalized_steps
+
+
+def _is_valid_tool_call(tool_call: ToolCall) -> bool:
+    """Valida os argumentos essenciais antes de qualquer chamada ao MCP."""
+    name = tool_call.tool_name
+    arguments = tool_call.arguments
+
+    if name not in REQUIRED_TOOLS:
+        return False
+    if name == "get_school_profile":
+        return bool(re.fullmatch(r"\d{8}", str(arguments.get("school_code", ""))))
+    if name == "get_municipality_metrics":
+        return bool(str(arguments.get("municipality_name", "")).strip())
+    if name == "compare_schools":
+        school_codes = arguments.get("school_codes")
+        if not isinstance(school_codes, list):
+            return False
+        distinct_codes = {str(code) for code in school_codes}
+        return (
+            2 <= len(school_codes) <= 5
+            and len(distinct_codes) == len(school_codes)
+            and all(re.fullmatch(r"\d{8}", code) for code in distinct_codes)
+        )
+    if name == "search_schools":
+        return bool(str(arguments.get("query", "")).strip())
+    if name == "calculate_enem_statistics":
+        area = arguments.get("area")
+        scope = arguments.get("scope")
+        if area not in {"cn", "ch", "lc", "mt", "essay"}:
+            return False
+        if scope == "state":
+            return True
+        return scope == "municipality" and bool(
+            str(arguments.get("municipality_name", "")).strip()
+        )
+    return name in {
+        "get_state_metrics",
+        "get_saeb_state_context",
+        "get_data_methodology",
+    }
+
+
+# --- Graph Nodes ---
+
+
+async def planner_node(state: AgentState) -> dict[str, Any]:
+    """Planner: analyzes question and produces execution plan."""
+    llm = _get_llm()
+
+    history_context = ""
+    if state.history:
+        recent = state.history[-6:]
+        history_context = "\n".join(
+            f"{msg.get('role', 'user')}: {msg.get('content', '')}" for msg in recent
+        )
+
+    context_parts = []
+    if state.school_code:
+        context_parts.append(f"Escola selecionada na interface (codigo INEP): {state.school_code}")
+    if state.selection:
+        context_parts.append(
+            "Filtros selecionados na interface: "
+            + json.dumps(state.selection, ensure_ascii=False)
+        )
+    if history_context:
+        context_parts.append(f"Historico recente:\n{history_context}")
+    if state.reflection:
+        context_parts.append(f"Motivo do replanejamento anterior: {state.reflection}")
+    context_parts.append(f"Pergunta atual: {state.question}")
+    user_message = "\n\n".join(context_parts)
+
+    response = await llm.ainvoke([
+        SystemMessage(content=PLANNER_SYSTEM_PROMPT),
+        HumanMessage(content=user_message),
+    ])
+
+    try:
+        parsed = _parse_json_response(response.content)
+        steps = [
+            PlanStep(
+                id=s["id"],
+                description=s["description"],
+                tool_calls=[
+                    ToolCall(tool_name=tc["tool_name"], arguments=tc["arguments"], step_id=s["id"])
+                    for tc in s.get("tool_calls", [])
+                ],
+            )
+            for s in parsed.get("steps", [])
+        ]
+        steps = _normalize_plan_for_context(steps, state)
+        seen_calls: set[str] = set()
+        for step in steps:
+            unique_calls = []
+            for tool_call in step.tool_calls:
+                signature = json.dumps(
+                    [tool_call.tool_name, tool_call.arguments],
+                    ensure_ascii=False,
+                    sort_keys=True,
+                )
+                if signature in seen_calls:
+                    continue
+                seen_calls.add(signature)
+                unique_calls.append(tool_call)
+            step.tool_calls = unique_calls
+        steps = [step for step in steps if step.tool_calls]
+        if not steps or not any(step.tool_calls for step in steps):
+            raise ValueError("O planner nao selecionou nenhuma ferramenta MCP.")
+        logger.info("Planner produced %d steps", len(steps))
+        return {"plan": steps, "current_step": 0, "iteration": state.iteration + 1}
+    except (json.JSONDecodeError, KeyError, TypeError, ValueError) as exc:
+        logger.error("Planner failed to parse plan: %s", exc)
+        return {
+            "plan": [],
+            "error": f"Planner error: {exc}",
+            "is_complete": True,
+            "final_answer": "Desculpe, não consegui planejar uma resposta adequada. Tente reformular sua pergunta.",
+        }
+
+
+async def executor_node(state: AgentState) -> dict[str, Any]:
+    """Executa o plano somente por chamadas ao servidor MCP."""
+    evidence = list(state.evidence)
+    updated_plan = list(state.plan)
+
+    async with create_mcp_client() as client:
+        listed_tools = await client.list_tools()
+        available_tools = {tool.name for tool in listed_tools.tools}
+        missing_tools = REQUIRED_TOOLS - available_tools
+        if missing_tools:
+            raise MCPToolError(
+                "Servidor MCP sem ferramentas obrigatorias: "
+                + ", ".join(sorted(missing_tools))
+            )
+
+        for i, step in enumerate(updated_plan):
+            if step.completed:
+                continue
+
+            step_results = []
+            for tc in step.tool_calls:
+                if tc.tool_name not in available_tools:
+                    step_results.append(
+                        {"tool": tc.tool_name, "error": "Ferramenta nao anunciada pelo MCP."}
+                    )
+                    continue
+                try:
+                    raw_result = await client.call_tool(tc.tool_name, tc.arguments)
+                    result = decode_tool_result(raw_result)
+                    step_results.append({"tool": tc.tool_name, "result": result})
+                    logger.info("Executed MCP tool %s successfully", tc.tool_name)
+                except Exception as exc:
+                    step_results.append({"tool": tc.tool_name, "error": str(exc)})
+                    logger.exception("MCP tool %s failed", tc.tool_name)
+
+            updated_plan[i] = step.model_copy(
+                update={"completed": True, "result": {"calls": step_results}}
+            )
+            evidence.append(
+                {"step_id": step.id, "description": step.description, "results": step_results}
+            )
+
+    return {"evidence": evidence, "plan": updated_plan, "current_step": len(updated_plan)}
+
+
+async def reflector_node(state: AgentState) -> dict[str, Any]:
+    """Reflector: evaluates evidence sufficiency and produces answer or replan."""
+    llm = _get_llm()
+
+    evidence_summary = json.dumps(state.evidence, ensure_ascii=False, default=str)[:8000]
+    plan_summary = json.dumps(
+        [{"id": s.id, "description": s.description, "completed": s.completed} for s in state.plan],
+        ensure_ascii=False,
+    )
+
+    prompt = f"""\
+Pergunta original: {state.question}
+
+Plano executado: {plan_summary}
+
+Evidências coletadas:
+{evidence_summary}
+
+Iteração atual: {state.iteration}/{state.max_iterations}
+
+{ANSWER_FORMAT_INSTRUCTIONS}
+"""
+
+    response = await llm.ainvoke([
+        SystemMessage(content=REFLECTOR_SYSTEM_PROMPT),
+        HumanMessage(content=prompt),
+    ])
+
+    return _interpret_reflector_output(
+        _message_text(response.content),
+        iteration=state.iteration,
+        max_iterations=state.max_iterations,
+        evidence=state.evidence,
+    )
+
+
+def _interpret_reflector_output(
+    content: str,
+    *,
+    iteration: int,
+    max_iterations: int,
+    evidence: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """Interpreta Markdown final ou o marcador simples de replanejamento."""
+    answer = content.strip()
+    if not answer:
+        raise RuntimeError("O modelo retornou uma resposta final vazia.")
+
+    replan_match = REPLAN_PATTERN.search(answer)
+    if replan_match:
+        reason = replan_match.group("reason").strip() or "Evidências insuficientes."
+        if iteration < max_iterations:
+            logger.info("Reflector requested replan: %s", reason)
+            return {
+                "is_complete": False,
+                "reflection": reason,
+                "plan": [],
+                "evidence": evidence,
+                "current_step": 0,
+            }
+        answer = (
+            "Não consegui encontrar todas as informações necessárias para responder com "
+            "segurança. Tente fazer a pergunta de outra forma ou escolha outra escola."
+        )
+
+    if INTERNAL_LANGUAGE_PATTERN.search(answer):
+        logger.warning("Internal terminology detected in the final answer; using public fallback.")
+        answer = (
+            "Não consegui concluir essa consulta com segurança. "
+            "Tente novamente ou faça a pergunta de outra forma."
+        )
+
+    return {"is_complete": True, "final_answer": answer, "reflection": "complete"}
+
+
+# --- Conditional Edges ---
+
+
+def should_continue(state: AgentState) -> str:
+    """Route after reflector: end if complete, otherwise replan via planner."""
+    if state.is_complete:
+        return END
+    if state.iteration >= state.max_iterations:
+        return END
+    if state.error:
+        return END
+    return "planner"
+
+
+def after_planner(state: AgentState) -> str:
+    """Interrompe cedo quando o planner nao consegue produzir um plano valido."""
+    if state.error or state.is_complete:
+        return END
+    return "executor"
+
+
+def _evidence_sources(evidence: list[dict[str, Any]]) -> list[str]:
+    sources: list[str] = []
+    for step in evidence:
+        for item in step.get("results", []):
+            result = item.get("result")
+            if not isinstance(result, dict):
+                continue
+            source = result.get("source")
+            if isinstance(source, str) and source not in sources:
+                sources.append(source)
+            schools = result.get("schools")
+            if isinstance(schools, list):
+                for school in schools:
+                    nested_source = school.get("source") if isinstance(school, dict) else None
+                    if isinstance(nested_source, str) and nested_source not in sources:
+                        sources.append(nested_source)
+    return sources
+
+
+# --- Build Graph ---
+
+
+def build_agent_graph() -> StateGraph:
+    """Construct and compile the plan/execute/reflect agent graph."""
+    graph = StateGraph(AgentState)
+
+    graph.add_node("planner", planner_node)
+    graph.add_node("executor", executor_node)
+    graph.add_node("reflector", reflector_node)
+
+    graph.set_entry_point("planner")
+    graph.add_conditional_edges("planner", after_planner, {"executor": "executor", END: END})
+    graph.add_edge("executor", "reflector")
+    graph.add_conditional_edges("reflector", should_continue, {"planner": "planner", END: END})
+
+    return graph.compile()
+
+
+async def run_agent(
+    question: str,
+    history: list[dict[str, str]] | None = None,
+    school_code: str | None = None,
+    selection: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Run the agent end-to-end and return the final answer with metadata."""
+    app = build_agent_graph()
+
+    initial_state = AgentState(
+        question=question,
+        history=history or [],
+        school_code=school_code,
+        selection=selection or {},
+    )
+
+    try:
+        final_state = AgentState.model_validate(await app.ainvoke(initial_state))
+        if final_state.error:
+            raise RuntimeError(final_state.error)
+        answer = final_state.final_answer.strip()
+        if not answer:
+            raise RuntimeError("O agente terminou sem produzir uma resposta.")
+        sources = _evidence_sources(final_state.evidence)
+        if sources and "fonte:" not in answer.lower():
+            answer = f"{answer}\n\nFonte: {'; '.join(sources)}"
+        return {
+            "answer": answer,
+            "iterations": final_state.iteration,
+            "evidence_count": len(final_state.evidence),
+            "engine": "mcp-langgraph",
+            "mode": "Agente Atlas via MCP",
+        }
+    except Exception as exc:
+        logger.exception("Agent execution failed")
+        return {
+            "answer": "Não consegui responder agora. Tente novamente em instantes.",
+            "error": str(exc),
+            "engine": "mcp-error",
+            "mode": "Temporariamente indisponível",
+        }

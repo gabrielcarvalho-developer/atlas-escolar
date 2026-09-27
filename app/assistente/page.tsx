@@ -24,7 +24,6 @@ import {
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import {
-  answerQuestionLocally,
   type AssistantAnswer,
   type AssistantConversationTurn,
   type AssistantVisualization,
@@ -54,29 +53,31 @@ type StoredConversation = {
 const STORAGE_KEY = 'atlas-assistant-conversation-v2';
 const MAX_STORED_MESSAGES = 80;
 
-const SUGGESTIONS = [
-  {
-    label: 'Análise rápida',
-    question:
-      'Faça uma análise rápida dos principais indicadores desta escola.',
-    icon: Bolt,
-  },
-  {
-    label: 'Desempenho no ENEM',
-    question: 'Compare as médias do ENEM da escola com o município.',
-    icon: BarChart3,
-  },
-  {
-    label: 'Gargalo de infraestrutura',
-    question: 'Qual é o principal gargalo de infraestrutura desta escola?',
-    icon: Construction,
-  },
-  {
-    label: 'Recursos ausentes',
-    question: 'Quais recursos estão ausentes nesta escola?',
-    icon: LaptopMinimal,
-  },
-];
+function buildSuggestions(context: SchoolContext) {
+  return [
+    {
+      label: 'Análise rápida',
+      question:
+        'Faça uma análise rápida dos principais indicadores desta escola.',
+      icon: Bolt,
+    },
+    {
+      label: 'Desempenho no ENEM',
+      question: `Compare as médias do ENEM desta escola com as médias do município de ${context.school.municipality}.`,
+      icon: BarChart3,
+    },
+    {
+      label: 'Gargalo de infraestrutura',
+      question: 'Qual é o principal gargalo de infraestrutura desta escola?',
+      icon: Construction,
+    },
+    {
+      label: 'Recursos ausentes',
+      question: 'Quais recursos não estão registrados nesta escola?',
+      icon: LaptopMinimal,
+    },
+  ];
+}
 
 function welcomeMessage(context: SchoolContext): ChatMessage {
   return {
@@ -85,7 +86,7 @@ function welcomeMessage(context: SchoolContext): ChatMessage {
     text: `Olá! Eu sou o Atlas. Agora posso consultar a base do **Maranhão**, seus **${MUNICIPALITIES.length} municípios** e as **${SCHOOLS.length} escolas identificadas**.\n\nPergunte por uma localidade ou escola específica.`,
     mode: 'contexto da base carregado',
     source: `Contexto atual: ${context.school.name}`,
-    engine: 'local',
+    engine: 'system',
   };
 }
 
@@ -175,6 +176,7 @@ function MessageVisualization({
 export default function AssistantPage() {
   const atlas = useAtlas();
   const context = atlas.schoolContext;
+  const suggestions = buildSuggestions(context);
   const [messages, setMessages] = useState<ChatMessage[]>(() => [
     welcomeMessage(context),
   ]);
@@ -229,7 +231,7 @@ export default function AssistantPage() {
     const controller = new AbortController();
     activeRequest.current = controller;
 
-    let answer: AssistantAnswer;
+    let answer: AssistantAnswer | undefined;
     try {
       const response = await fetch('/api/assistant', {
         method: 'POST',
@@ -251,12 +253,11 @@ export default function AssistantPage() {
       answer = (await response.json()) as AssistantAnswer;
     } catch {
       if (controller.signal.aborted) return;
-      answer = answerQuestionLocally(clean, context, history, {
-        analysisLevel: atlas.analysisLevel,
-        municipality: atlas.municipality,
-        comparisonMunicipality: atlas.comparisonMunicipality,
-        compareMunicipalities: atlas.compareMunicipalities,
-      });
+      answer = {
+        text: 'Não consegui responder agora. Tente novamente em instantes.',
+        mode: 'Temporariamente indisponível',
+        engine: 'system',
+      };
     } finally {
       if (activeRequest.current === controller) {
         activeRequest.current = null;
@@ -264,7 +265,7 @@ export default function AssistantPage() {
       }
     }
 
-    if (controller.signal.aborted) return;
+    if (controller.signal.aborted || !answer) return;
     setMessages((current) => [
       ...current,
       { id: crypto.randomUUID(), role: 'assistant', ...answer },
@@ -329,7 +330,7 @@ export default function AssistantPage() {
                   Experimente perguntar
                 </p>
                 <div className="chart-scroll -mx-4 flex gap-2 overflow-x-auto px-4 pb-1">
-                  {SUGGESTIONS.map(({ label, question, icon: Icon }) => (
+                  {suggestions.map(({ label, question, icon: Icon }) => (
                     <button
                       key={label}
                       onClick={() => void send(question)}
@@ -386,7 +387,7 @@ export default function AssistantPage() {
                       <Database size={15} />
                     </div>
                     <span className="animate-pulse">
-                      Consultando a base e calculando…
+                      Analisando sua pergunta…
                     </span>
                   </div>
                 )}
@@ -439,7 +440,7 @@ export default function AssistantPage() {
                 Perguntas sugeridas
               </p>
               <div className="space-y-2.5">
-                {SUGGESTIONS.map(({ label, question, icon: Icon }) => (
+                {suggestions.map(({ label, question, icon: Icon }) => (
                   <button
                     key={label}
                     onClick={() => void send(question)}
