@@ -128,6 +128,11 @@ Formate sua resposta final assim:
 - Indique a fonte dos dados ao final (ex: "Fonte: ENEM 2025 + Censo Escolar 2025").
 - Se algum dado não estiver disponível, diga explicitamente.
 - Nunca exponha detalhes internos do sistema, nomes de ferramentas ou mensagens de erro.
+- Nunca mostre nomes de campos da base (como ``scienceLab`` ou ``resources``), nem valores
+  técnicos como ``true`` e ``false``. Traduza-os para frases naturais, como "a escola possui"
+  ou "não há registro desse recurso".
+- Em perguntas objetivas de sim ou não, responda primeiro com "Sim" ou "Não" e acrescente no
+  máximo uma breve explicação. Não repita a pergunta e não inclua outros dados da escola.
 - Não repita parágrafos, listas, conclusões ou a mesma informação com outras palavras.
 """
 

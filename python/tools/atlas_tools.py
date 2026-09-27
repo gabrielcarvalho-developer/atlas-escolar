@@ -238,7 +238,11 @@ def _build_school_profile(row: dict[str, Any], year: int) -> dict[str, Any]:
             "publicEnergy": row.get("IN_ENERGIA_REDE_PUBLICA") == 1,
             "publicSewage": row.get("IN_ESGOTO_REDE_PUBLICA") == 1,
             "wasteCollection": row.get("IN_LIXO_SERVICO_COLETA") == 1,
-            "library": row.get("IN_BIBLIOTECA") == 1,
+            "library": (
+                row.get("TEM_BIBLIOTECA_OU_SALA_LEITURA") == 1
+                or row.get("IN_BIBLIOTECA") == 1
+                or row.get("IN_BIBLIOTECA_SALA_LEITURA") == 1
+            ),
             "scienceLab": row.get("IN_LABORATORIO_CIENCIAS") == 1,
             "computerLab": row.get("IN_LABORATORIO_INFORMATICA") == 1,
             "sportsCourt": row.get("IN_QUADRA_ESPORTES") == 1,

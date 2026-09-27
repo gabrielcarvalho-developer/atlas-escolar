@@ -6,8 +6,8 @@ from agent import graph as agent_graph
 from agent.graph import (
     _collapse_repeated_blocks,
     _conversational_answer,
-    _grounded_resource_answer,
     _focused_evidence,
+    _grounded_resource_answer,
     _interpret_reflector_output,
     _normalize_plan_for_context,
     _openai_compatible_base_url,
@@ -139,6 +139,12 @@ async def test_mcp_tool_returns_real_school_data() -> None:
     assert result["code"] == "21288780"
     assert result["municipality"] == "Coelho Neto"
     assert result["source"] == "ENEM 2025 + Censo Escolar 2025"
+
+
+def test_school_profile_matches_dashboard_library_or_reading_room_indicator() -> None:
+    result = atlas_tools.get_school_profile("21272689", 2025)
+
+    assert result["resources"]["library"] is True
 
 
 def test_school_profile_compares_all_available_years(monkeypatch) -> None:
@@ -492,3 +498,127 @@ def test_missing_resources_answer_uses_boolean_and_count_semantics() -> None:
     assert "quadra" not in answer.casefold()
     assert "sportsCourt" not in answer
     assert answer.count("Recurso não registrado") == 1
+
+
+def test_direct_resource_answer_is_short_natural_and_scoped() -> None:
+    evidence = [
+        {
+            "step_id": 1,
+            "results": [
+                {
+                    "tool": "get_school_profile",
+                    "result": {
+                        "name": "Escola Exemplo",
+                        "resources": {
+                            "scienceLab": False,
+                            "library": False,
+                            "internet": True,
+                            "totalDevices": 8,
+                            "climateControlledRooms": 12,
+                        },
+                        "source": "ENEM 2025 + Censo Escolar 2025",
+                    },
+                }
+            ],
+        }
+    ]
+
+    answer = _grounded_resource_answer(
+        "A escola tem laboratório de ciências?", evidence
+    )
+
+    assert answer == (
+        "Não. Nos dados disponíveis, não há registro de laboratório de ciências nessa escola."
+        "\n\nFonte: ENEM 2025 + Censo Escolar 2025"
+    )
+    assert "scienceLab" not in answer
+    assert "false" not in answer.casefold()
+    assert "biblioteca" not in answer.casefold()
+    assert "internet" not in answer.casefold()
+    assert "dispositivos" not in answer.casefold()
+    assert "salas" not in answer.casefold()
+
+
+def test_direct_resource_answer_handles_positive_and_count_questions() -> None:
+    evidence = [
+        {
+            "step_id": 1,
+            "results": [
+                {
+                    "tool": "get_school_profile",
+                    "result": {
+                        "resources": {
+                            "studentInternet": True,
+                            "internet": True,
+                            "climateControlledRooms": 12,
+                        }
+                    },
+                }
+            ],
+        }
+    ]
+
+    internet_answer = _grounded_resource_answer(
+        "A escola possui internet para alunos?", evidence
+    )
+    rooms_answer = _grounded_resource_answer(
+        "Quantas salas climatizadas a escola tem?", evidence
+    )
+
+    assert internet_answer == "Sim. A escola possui acesso à internet para alunos."
+    assert rooms_answer == "A escola tem 12 salas climatizadas."
+
+
+def test_library_answer_uses_the_same_combined_indicator_as_the_dashboard() -> None:
+    evidence = [
+        {
+            "step_id": 1,
+            "results": [
+                {
+                    "tool": "get_school_profile",
+                    "result": {
+                        "resources": {"library": True},
+                        "source": "Censo Escolar 2025",
+                    },
+                }
+            ],
+        }
+    ]
+
+    answer = _grounded_resource_answer("A escola tem biblioteca?", evidence)
+
+    assert answer == (
+        "Sim. A escola possui biblioteca ou sala de leitura."
+        "\n\nFonte: Censo Escolar 2025"
+    )
+
+
+def test_direct_resource_question_normalizes_plan_to_school_profile() -> None:
+    state = AgentState(
+        question="Há laboratório de ciências?",
+        school_code="21288780",
+        selection={"year": 2025},
+    )
+    steps = [
+        PlanStep(
+            id=1,
+            description="Consultar dados",
+            tool_calls=[
+                ToolCall(
+                    tool_name="get_data_methodology",
+                    arguments={},
+                    step_id=1,
+                )
+            ],
+        )
+    ]
+
+    normalized = _normalize_plan_for_context(steps, state)
+
+    assert normalized[0].tool_calls == [
+        ToolCall(
+            tool_name="get_school_profile",
+            arguments={"school_code": "21288780", "year": 2025},
+            step_id=1,
+        )
+    ]

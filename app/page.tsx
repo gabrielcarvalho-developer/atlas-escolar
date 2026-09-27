@@ -608,7 +608,10 @@ export default function OverviewPage() {
   const math = context.performanceAreas.find((area) => area.key === 'mt')!;
   const schoolResources = [
     ['Água potável', context.school.resources.water],
-    ['Biblioteca', context.school.resources.library || context.school.resources.readingRoom],
+    [
+      'Biblioteca ou sala de leitura',
+      context.school.resources.library || context.school.resources.readingRoom,
+    ],
     ['Coleta de lixo', context.school.resources.wasteCollection],
     ['Energia pública', context.school.resources.publicEnergy],
     ['Esgoto público', context.school.resources.publicSewage],

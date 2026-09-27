@@ -41,7 +41,7 @@ RESOURCE_BOOLEAN_LABELS = {
     "publicEnergy": "energia da rede pública",
     "publicSewage": "ligação à rede pública de esgoto",
     "wasteCollection": "coleta de lixo",
-    "library": "biblioteca",
+    "library": "biblioteca ou sala de leitura",
     "scienceLab": "laboratório de ciências",
     "computerLab": "laboratório de informática",
     "sportsCourt": "quadra de esportes",
@@ -54,6 +54,28 @@ RESOURCE_COUNT_LABELS = {
     "totalDevices": "dispositivos para uso dos alunos",
     "climateControlledRooms": "salas climatizadas",
     "accessibleRooms": "salas acessíveis",
+}
+RESOURCE_COUNT_SINGULAR_LABELS = {
+    "totalDevices": "dispositivo para uso dos alunos",
+    "climateControlledRooms": "sala climatizada",
+    "accessibleRooms": "sala acessível",
+}
+RESOURCE_ALIASES = {
+    "water": ("agua potavel",),
+    "publicEnergy": ("energia eletrica", "energia da rede publica", "energia publica"),
+    "publicSewage": ("rede publica de esgoto", "rede de esgoto", "esgoto"),
+    "wasteCollection": ("coleta de lixo",),
+    "library": ("biblioteca",),
+    "scienceLab": ("laboratorio de ciencias", "laboratorio cientifico"),
+    "computerLab": ("laboratorio de informatica", "laboratorio de computadores"),
+    "sportsCourt": ("quadra de esportes", "quadra esportiva", "quadra"),
+    "cafeteria": ("refeitorio",),
+    "studentInternet": ("internet para alunos", "internet para estudantes"),
+    "broadband": ("banda larga",),
+    "internet": ("acesso a internet", "internet"),
+    "totalDevices": ("dispositivos", "computadores", "tablets"),
+    "climateControlledRooms": ("salas climatizadas", "sala climatizada"),
+    "accessibleRooms": ("salas acessiveis", "sala acessivel"),
 }
 RESOURCE_KEY_PATTERN = re.compile(
     r"\s*\((?:" + "|".join([*RESOURCE_BOOLEAN_LABELS, *RESOURCE_COUNT_LABELS]) + r")\)",
@@ -251,6 +273,54 @@ def _asks_for_missing_resources(question: str) -> bool:
     )
 
 
+def _requested_resource_keys(question: str) -> list[str]:
+    """Identifica recursos citados pelo nome comum usado pelo público."""
+    folded_question = _fold_text(question)
+    keys = [
+        key
+        for key, aliases in RESOURCE_ALIASES.items()
+        if any(alias in folded_question for alias in aliases)
+    ]
+    if "studentInternet" in keys and "internet" in keys:
+        keys.remove("internet")
+    if "computerLab" in keys and "totalDevices" in keys:
+        keys.remove("totalDevices")
+    return keys
+
+
+def _asks_direct_resource_question(question: str) -> bool:
+    """Distingue perguntas objetivas de pedidos amplos sobre infraestrutura."""
+    folded_question = re.sub(r"[^a-z0-9]+", " ", _fold_text(question)).strip()
+    if any(
+        term in folded_question
+        for term in (
+            "compare",
+            "comparacao",
+            "desempenho",
+            "enem",
+            "media",
+            "nota",
+            "municipio",
+            "estado",
+            "infraestrutura",
+        )
+    ):
+        return False
+    direct_terms = (
+        " tem ",
+        " possui ",
+        " ha ",
+        " existe ",
+        " existem ",
+        " conta com ",
+        " quantos ",
+        " quantas ",
+    )
+    return bool(_requested_resource_keys(question)) and any(
+        term in f" {folded_question} " for term in direct_terms
+    )
+
+
 def _collapse_repeated_blocks(answer: str) -> str:
     """Interrompe respostas quando o modelo começa a repetir blocos longos."""
     paragraphs = re.split(r"\n\s*\n", answer.strip())
@@ -279,7 +349,9 @@ def _grounded_resource_answer(
     question: str, evidence: list[dict[str, Any]]
 ) -> str | None:
     """Formata perguntas sobre recursos diretamente da evidência escolar do MCP."""
-    if not _asks_for_missing_resources(question):
+    asks_for_missing = _asks_for_missing_resources(question)
+    requested_keys = _requested_resource_keys(question)
+    if not asks_for_missing and not _asks_direct_resource_question(question):
         return None
 
     profile: dict[str, Any] | None = None
@@ -295,6 +367,40 @@ def _grounded_resource_answer(
         return None
 
     resources = profile["resources"]
+    source = profile.get("source")
+
+    if not asks_for_missing:
+        statements = []
+        for key in requested_keys:
+            value = resources.get(key)
+            label = RESOURCE_BOOLEAN_LABELS.get(key) or RESOURCE_COUNT_LABELS.get(key)
+            if label is None or value is None:
+                continue
+            if isinstance(value, bool):
+                if value:
+                    statements.append(f"Sim. A escola possui {label}.")
+                else:
+                    statements.append(
+                        f"Não. Nos dados disponíveis, não há registro de {label} nessa escola."
+                    )
+            elif isinstance(value, (int, float)) and not isinstance(value, bool):
+                display_label = (
+                    RESOURCE_COUNT_SINGULAR_LABELS[key] if value == 1 else label
+                )
+                if value == 0:
+                    statements.append(
+                        f"Nos dados disponíveis, não há {label} registrados nessa escola."
+                    )
+                else:
+                    statements.append(f"A escola tem {value:g} {display_label}.")
+
+        if not statements:
+            return None
+        sections = [" ".join(statements)]
+        if isinstance(source, str) and source:
+            sections.append(f"Fonte: {source}")
+        return "\n\n".join(sections)
+
     missing = [
         label
         for key, label in RESOURCE_BOOLEAN_LABELS.items()
@@ -325,7 +431,6 @@ def _grounded_resource_answer(
             + "\n\nEsses valores indicam quantidades registradas na base."
         )
 
-    source = profile.get("source")
     if isinstance(source, str) and source:
         sections.append(f"Fonte: {source}")
     return "\n\n".join(sections)
@@ -442,7 +547,10 @@ def _normalize_plan_for_context(
     """Corrige comparações escola-município e bloqueia compare_schools inválido."""
     selected_year = state.selection.get("year")
     selected_saeb_year = state.selection.get("saebYear")
-    if _asks_for_missing_resources(state.question) and state.school_code and steps:
+    if (
+        _asks_for_missing_resources(state.question)
+        or _asks_direct_resource_question(state.question)
+    ) and state.school_code and steps:
         arguments: dict[str, Any] = {"school_code": state.school_code}
         if isinstance(selected_year, int):
             arguments["year"] = selected_year
