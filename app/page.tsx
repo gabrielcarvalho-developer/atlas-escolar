@@ -402,33 +402,32 @@ function TerritoryOverview({
           <TerritoryLegend primary={primary} secondary={secondary} />
         </article>
 
-        <article className="relative flex h-full flex-col overflow-hidden rounded-[20px] bg-[var(--navy)] p-5 text-white sm:p-6">
-          <div className="absolute -right-16 -top-14 size-44 rounded-full border-[34px] border-white/[0.04]" />
-          <p className="relative text-[11px] font-semibold text-white/55">
+        <article className="atlas-card relative flex h-full flex-col overflow-hidden p-5 sm:p-6 dark:bg-[var(--navy)] dark:text-white">
+          <p className="relative text-sm font-semibold text-[var(--muted)] dark:text-white/65">
             Leitura em destaque
           </p>
           <div className="relative mt-8">
-            <span className="grid size-10 place-items-center rounded-full bg-white/10 text-[var(--lime)]">
+            <span className="grid size-10 place-items-center rounded-full bg-[var(--teal-soft)] text-[var(--teal)] dark:bg-white/10 dark:text-[var(--lime)]">
               <Wifi size={18} />
             </span>
             <p className="mt-5 text-3xl font-bold tracking-[-0.05em]">
               {formatNumber(connectivityGap, 1)} p.p.
             </p>
             <p className="mt-2 text-sm font-medium">de diferença no acesso</p>
-            <p className="mt-3 text-xs leading-relaxed text-white/55">
+            <p className="mt-3 text-sm leading-relaxed text-[var(--muted)] dark:text-white/65">
               {formatPercentage(primary.indicators.internet)} das escolas têm
               internet, mas {formatPercentage(primary.indicators.studentInternet)}{' '}
               registram acesso para os alunos.
             </p>
           </div>
-          <div className="relative mt-auto space-y-3 border-t border-white/10 pt-5">
+          <div className="relative mt-auto space-y-3 border-t border-[var(--line)] pt-5 dark:border-white/10">
             {[
               ['Internet', primary.indicators.internet],
               ['Uso pedagógico', primary.indicators.learningInternet],
               ['Acesso dos alunos', primary.indicators.studentInternet],
             ].map(([label, value]) => (
-              <div key={String(label)} className="flex items-center justify-between text-xs">
-                <span className="text-white/55">{label}</span>
+              <div key={String(label)} className="flex items-center justify-between text-sm">
+                <span className="text-[var(--muted)] dark:text-white/65">{label}</span>
                 <span className="font-semibold">{formatPercentage(Number(value))}</span>
               </div>
             ))}
@@ -470,7 +469,7 @@ function TerritoryOverview({
           )}
         </article>
 
-        <article className="atlas-card h-full p-5 sm:p-6">
+        <article className="atlas-card flex h-full flex-col p-5 sm:p-6">
           <PanelHeader
             eyebrow="Recursos"
             title="Tecnologia e salas"
@@ -490,7 +489,7 @@ function TerritoryOverview({
               </div>
             ))}
           </div>
-          <div className="mt-5 flex items-center justify-between border-b border-[var(--line)] pb-4">
+          <div className="mt-5 flex items-center justify-between">
             <div>
               <p className="text-[11px] text-[var(--muted)]">Dispositivos para alunos</p>
               <p className="mt-1 text-2xl font-bold tracking-[-0.04em]">
@@ -501,7 +500,7 @@ function TerritoryOverview({
               <MonitorSmartphone size={19} />
             </span>
           </div>
-          <div className="mt-4 grid gap-3 text-xs">
+          <div className="mt-auto grid gap-3 border-t border-[var(--line)] pt-4 text-xs">
             <div className="flex justify-between gap-4">
               <span className="text-[var(--muted)]">Salas climatizadas</span>
               <strong>{formatPercentage(primary.indicators.climateRooms)}</strong>
@@ -544,7 +543,7 @@ function TerritoryOverview({
               description="Médias estaduais ponderadas pelos estudantes presentes."
             />
             <SaebStateChart year={saebYear} />
-            <div className="mt-1 grid grid-cols-3 gap-2">
+            <div className="mt-4 grid grid-cols-3 gap-2 border-t border-[var(--line)] pt-4">
               {getSaebState(saebYear).map((row) => (
                 <div key={row.ETAPA} className="rounded-xl bg-[var(--surface-soft)] p-3 text-center">
                   <p className="truncate text-[10px] text-[var(--muted)]">
@@ -790,7 +789,6 @@ export default function OverviewPage() {
         <HistoricalOverview history={context.history} selectedYear={context.school.year} />
 
         <section className="relative mt-5 overflow-hidden rounded-[20px] bg-[var(--navy)] p-6 text-white sm:p-8">
-          <div className="absolute -right-16 -top-20 size-60 rounded-full border-[48px] border-white/[0.04]" />
           <div className="relative flex flex-col justify-between gap-6 lg:flex-row lg:items-center">
             <div>
               <p className="text-xl font-semibold tracking-[-0.035em]">

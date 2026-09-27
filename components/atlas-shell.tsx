@@ -6,14 +6,11 @@ import { useEffect, useState } from 'react';
 import {
   ArrowLeftRight,
   Bot,
-  CalendarDays,
   ChartNoAxesCombined,
   ChevronRight,
   ClipboardCheck,
-  Filter,
   Menu,
   Moon,
-  SlidersHorizontal,
   Sun,
   X,
 } from 'lucide-react';
@@ -58,6 +55,9 @@ const ANALYSIS_LEVELS: Array<{ value: AnalysisLevel; label: string }> = [
 
 function Filters({ onDone }: { onDone?: () => void }) {
   const atlas = useAtlas();
+  const activeLevelIndex = ANALYSIS_LEVELS.findIndex(
+    ({ value }) => value === atlas.analysisLevel,
+  );
   const municipalityOptions =
     atlas.analysisLevel === 'school'
       ? atlas.schoolMunicipalities
@@ -67,8 +67,13 @@ function Filters({ onDone }: { onDone?: () => void }) {
     <div className="space-y-5">
       <section>
         <p className="atlas-field-label mb-2.5">Nível da análise</p>
-        <fieldset className="grid grid-cols-3 rounded-xl bg-[var(--surface-soft)] p-1">
+        <fieldset className="relative grid grid-cols-3 overflow-hidden rounded-full border border-[var(--line)] bg-[var(--surface-soft)]">
           <legend className="sr-only">Nível da análise</legend>
+          <span
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-y-0 left-0 w-1/3 rounded-full bg-[var(--surface)] shadow-sm ring-1 ring-inset ring-[var(--line)] transition-transform duration-300 ease-out motion-reduce:transition-none"
+            style={{ transform: `translateX(${activeLevelIndex * 100}%)` }}
+          />
           {ANALYSIS_LEVELS.map(({ value, label }) => {
             const active = atlas.analysisLevel === value;
             return (
@@ -77,9 +82,9 @@ function Filters({ onDone }: { onDone?: () => void }) {
                 type="button"
                 onClick={() => atlas.setAnalysisLevel(value)}
                 aria-pressed={active}
-                className={`min-h-9 min-w-0 rounded-lg px-1.5 text-[11px] font-semibold transition ${
+                className={`relative z-10 min-h-9 min-w-0 rounded-full px-1.5 text-[11px] font-semibold transition-colors duration-300 ${
                   active
-                    ? 'bg-[var(--surface)] text-[var(--ink)] shadow-sm ring-1 ring-[var(--line)]'
+                    ? 'text-[var(--ink)]'
                     : 'text-[var(--muted)] hover:text-[var(--ink)]'
                 }`}
               >
@@ -332,26 +337,11 @@ export function AtlasShell({ children }: { children: React.ReactNode }) {
 
           <div className="my-5 h-px bg-[var(--line)]" />
 
-          <div className="mb-4 flex items-center gap-2 px-3 text-[10px] font-semibold uppercase tracking-[0.13em] text-[var(--muted)]">
-            <SlidersHorizontal size={12} /> Contexto dos dados
-          </div>
           <div className="px-1">
             <Filters />
           </div>
         </div>
 
-        <div className="border-t border-[var(--line)] p-4">
-          <div className="flex items-center gap-2.5 rounded-xl bg-[var(--surface-soft)] p-3">
-            <CalendarDays size={15} className="text-[var(--teal)]" />
-            <div className="min-w-0">
-              <p className="text-[11px] font-semibold">Bases ativas</p>
-              <p className="mt-0.5 text-[10px] text-[var(--muted)]">
-                Censo/ENEM {atlas.year}
-                {atlas.saebYear ? ` · SAEB ${atlas.saebYear}` : ''}
-              </p>
-            </div>
-          </div>
-        </div>
       </aside>
 
       {filtersOpen && (
@@ -382,10 +372,9 @@ export function AtlasShell({ children }: { children: React.ReactNode }) {
                 <X size={18} />
               </button>
             </div>
-            <div className="mb-5 mt-8 flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.13em] text-[var(--muted)]">
-              <Filter size={13} /> Contexto dos dados
+            <div className="mt-8">
+              <Filters onDone={closeFilters} />
             </div>
-            <Filters onDone={closeFilters} />
           </aside>
         </div>
       )}

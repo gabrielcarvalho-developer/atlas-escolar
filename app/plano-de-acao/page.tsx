@@ -3,7 +3,6 @@
 import { useMemo, useState } from 'react';
 import {
   ArrowDownToLine,
-  ArrowRight,
   Building2,
   Check,
   ListChecks,
@@ -95,13 +94,34 @@ export default function ActionPlanPage() {
         </section>
 
         <section className="mt-9">
-          <div className="max-w-2xl">
-            <p className="atlas-eyebrow">Pontos de melhoria</p>
-            <h2 className="atlas-section-title">O que precisa melhorar</h2>
-            <p className="atlas-section-copy">
-              A priorização combina infraestrutura, desempenho e cobertura dos
-              dados disponíveis.
-            </p>
+          <div className="flex flex-col justify-between gap-5 sm:flex-row sm:items-end">
+            <div className="max-w-2xl">
+              <p className="atlas-eyebrow">Pontos de melhoria</p>
+              <h2 className="atlas-section-title">O que precisa melhorar</h2>
+              <p className="atlas-section-copy">
+                A priorização combina infraestrutura, desempenho e cobertura dos
+                dados disponíveis.
+              </p>
+            </div>
+            <div className="shrink-0">
+              <Button
+                onClick={downloadReport}
+                className="h-11 w-full rounded-xl bg-[var(--navy)] px-5 font-bold text-white hover:bg-[var(--teal)] sm:w-fit dark:border dark:border-[var(--line-strong)]"
+              >
+                {downloaded ? (
+                  <>
+                    <Check size={17} /> Relatório baixado
+                  </>
+                ) : (
+                  <>
+                    <ArrowDownToLine size={17} /> Baixar relatório PDF
+                  </>
+                )}
+              </Button>
+              <span className="sr-only" aria-live="polite">
+                {downloaded ? 'Relatório baixado com sucesso' : ''}
+              </span>
+            </div>
           </div>
 
           <div className="mt-5 grid gap-4 xl:grid-cols-2">
@@ -113,8 +133,6 @@ export default function ActionPlanPage() {
                   className="atlas-card relative flex min-h-[280px] flex-col overflow-hidden"
                 >
                   <div className="absolute inset-y-0 left-0 w-1.5 bg-[var(--teal)]" />
-                  <div className="absolute -right-12 -top-14 size-44 rounded-full bg-[var(--teal-soft)]/65" />
-
                   <div className="relative flex flex-1 flex-col p-5 pl-6 sm:p-7 sm:pl-8">
                     <div className="flex items-start justify-between gap-4">
                       <div className="flex min-w-0 items-center gap-3.5">
@@ -165,42 +183,6 @@ export default function ActionPlanPage() {
           </div>
         </section>
 
-        <section className="relative mb-2 mt-6 overflow-hidden rounded-[12px] bg-[var(--navy)] p-5 text-white shadow-[0_22px_70px_rgb(18_47_56/17%)] sm:p-7 lg:p-8">
-          <div className="absolute -right-16 -top-24 size-72 rounded-full border-[56px] border-white/[0.04]" />
-          <div className="relative flex flex-col justify-between gap-6 lg:flex-row lg:items-center">
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
-              <div className="grid size-12 shrink-0 place-items-center rounded-2xl bg-[var(--lime)] text-[var(--navy)]">
-                <ArrowDownToLine size={21} />
-              </div>
-              <div>
-                <p className="text-xl font-bold tracking-[-0.035em] sm:text-2xl">
-                  Leve o diagnóstico para a reunião
-                </p>
-                <p className="mt-2 max-w-xl text-sm leading-relaxed text-white/58">
-                  Baixe um resumo visual com os indicadores e pontos de melhoria
-                  desta escola.
-                </p>
-              </div>
-            </div>
-            <Button
-              onClick={downloadReport}
-              className="h-12 w-full shrink-0 rounded-xl bg-[var(--lime)] px-5 font-bold text-[var(--navy)] hover:bg-white lg:w-fit"
-            >
-              {downloaded ? (
-                <>
-                  <Check size={17} /> Relatório baixado
-                </>
-              ) : (
-                <>
-                  Gerar relatório PDF <ArrowRight size={17} />
-                </>
-              )}
-            </Button>
-            <span className="sr-only" aria-live="polite">
-              {downloaded ? 'Relatório baixado com sucesso' : ''}
-            </span>
-          </div>
-        </section>
       </div>
     </AtlasShell>
   );
