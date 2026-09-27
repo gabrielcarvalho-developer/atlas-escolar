@@ -37,8 +37,6 @@ import {
   buildMunicipalityMetrics,
   buildStateHistory,
   buildStateMetrics,
-  ENEM_AREA_KEYS,
-  ENEM_AREA_SHORT_LABELS,
   getSaebState,
   INFRA_KEYS,
   INFRA_LABELS,
@@ -240,41 +238,18 @@ function HistoricalOverview({
           <h2 className="atlas-section-title">Evolução entre os anos disponíveis</h2>
         </div>
         {current && previous && (
-          <p className="hidden text-xs text-[var(--muted)] sm:block">
-            {previous.year} → {current.year}
+          <p className="hidden items-center gap-1.5 text-xs text-[var(--muted)] sm:flex">
+            <span>{previous.year}</span>
+            <ArrowRight aria-hidden="true" size={14} strokeWidth={1.8} />
+            <span>{current.year}</span>
           </p>
         )}
       </div>
 
-      {current && previous && (
-        <div className="mb-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
-          {ENEM_AREA_KEYS.map((key) => {
-            const currentValue = current.averages[key];
-            const previousValue = previous.averages[key];
-            const delta =
-              currentValue === null || previousValue === null
-                ? null
-                : currentValue - previousValue;
-            return (
-              <article key={key} className="atlas-card p-4">
-                <p className="text-[10px] font-semibold text-[var(--muted)]">
-                  {ENEM_AREA_SHORT_LABELS[key]}
-                </p>
-                <p className="mt-2 text-lg font-bold">
-                  {delta === null
-                    ? '—'
-                    : `${delta > 0 ? '+' : ''}${formatNumber(delta, 1)} pts`}
-                </p>
-              </article>
-            );
-          })}
-        </div>
-      )}
-
       <div className="grid gap-4 xl:grid-cols-2">
         <article className="atlas-card min-w-0 p-5 sm:p-6">
           <PanelHeader eyebrow="ENEM" title="Notas ao longo do tempo" />
-          <HistoricalPerformanceChart history={history} />
+          <HistoricalPerformanceChart history={history} selectedYear={selectedYear} />
         </article>
         <article className="atlas-card min-w-0 p-5 sm:p-6">
           <PanelHeader eyebrow="Infraestrutura" title="Condições ao longo do tempo" />
@@ -516,7 +491,7 @@ function TerritoryOverview({
       <section
         className={`mt-4 grid items-stretch gap-4 ${
           primary.kind === 'state'
-            ? 'xl:grid-cols-[minmax(0,1.6fr)_minmax(300px,.75fr)]'
+            ? 'xl:grid-cols-2'
             : ''
         }`}
       >
