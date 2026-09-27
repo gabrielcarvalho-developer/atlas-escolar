@@ -1,6 +1,6 @@
 'use client';
 
-import { Fragment, useEffect, useRef, useState } from 'react';
+import { Fragment, useEffect, useRef, useState, type ReactNode } from 'react';
 import {
   BarChart3,
   Bot,
@@ -148,28 +148,238 @@ function RichText({
   text: string;
   typing?: boolean;
 }) {
-  const paragraphs = text.split('\n\n');
+  type TextBlock =
+    | { type: 'paragraph'; content: string }
+    | { type: 'heading'; content: string; level: number }
+    | { type: 'quote'; content: string }
+    | { type: 'list'; items: string[]; ordered: boolean };
+
+  const blocks: TextBlock[] = [];
+  let paragraphLines: string[] = [];
+  let activeList: Extract<TextBlock, { type: 'list' }> | undefined;
+
+  function flushParagraph() {
+    const content = paragraphLines.join('\n').trim();
+    if (content) blocks.push({ type: 'paragraph', content });
+    paragraphLines = [];
+  }
+
+  function flushList() {
+    if (activeList) blocks.push(activeList);
+    activeList = undefined;
+  }
+
+  for (const rawLine of text.replace(/\r\n?/g, '\n').split('\n')) {
+    const line = rawLine.trimEnd();
+    if (!line.trim()) {
+      flushParagraph();
+      flushList();
+      continue;
+    }
+
+    const heading = line.match(/^(#{1,3})\s+(.+)$/);
+    const unorderedItem = line.match(/^\s*[-*•]\s+(.+)$/);
+    const orderedItem = line.match(/^\s*\d+[.)]\s+(.+)$/);
+    const quote = line.match(/^>\s?(.+)$/);
+
+    if (heading) {
+      flushParagraph();
+      flushList();
+      blocks.push({
+        type: 'heading',
+        content: heading[2],
+        level: heading[1].length,
+      });
+      continue;
+    }
+
+    const listItem = unorderedItem ?? orderedItem;
+    if (listItem) {
+      flushParagraph();
+      const ordered = Boolean(orderedItem);
+      if (!activeList || activeList.ordered !== ordered) {
+        flushList();
+        activeList = { type: 'list', ordered, items: [] };
+      }
+      activeList.items.push(listItem[1]);
+      continue;
+    }
+
+    if (quote) {
+      flushParagraph();
+      flushList();
+      blocks.push({ type: 'quote', content: quote[1] });
+      continue;
+    }
+
+    if (activeList && /^\s{2,}\S/.test(rawLine)) {
+      const lastItem = activeList.items.length - 1;
+      activeList.items[lastItem] += ` ${line.trim()}`;
+      continue;
+    }
+
+    flushList();
+    paragraphLines.push(line);
+  }
+  flushParagraph();
+  flushList();
+
+  function inlineMarkdown(content: string, keyPrefix: string): ReactNode[] {
+    return content
+      .split(/(\*\*[^*\n]+\*\*|`[^`\n]+`)/g)
+      .filter(Boolean)
+      .map((part, index) => {
+        const key = `${keyPrefix}-${index}`;
+        if (part.startsWith('**') && part.endsWith('**')) {
+          return (
+            <strong key={key} className="font-extrabold text-[inherit]">
+              {part.slice(2, -2)}
+            </strong>
+          );
+        }
+        if (part.startsWith('`') && part.endsWith('`')) {
+          return (
+            <code key={key} className="atlas-rich-text-code">
+              {part.slice(1, -1)}
+            </code>
+          );
+        }
+        return <Fragment key={key}>{part}</Fragment>;
+      });
+  }
+
+  function cursor(show: boolean) {
+    return show ? (
+      <span className="atlas-typing-cursor" aria-hidden="true" />
+    ) : null;
+  }
 
   return (
-    <div className="space-y-3 text-sm leading-7">
-      {paragraphs.map((paragraph, index) => (
-        <p key={index} className="whitespace-pre-line">
-          {paragraph.split(/(\*\*.*?\*\*)/g).map((part, partIndex) =>
-            part.startsWith('**') && part.endsWith('**') ? (
-              <strong key={partIndex} className="font-bold text-[inherit]">
-                {part.slice(2, -2)}
-              </strong>
-            ) : (
-              <Fragment key={partIndex}>{part}</Fragment>
-            ),
-          )}
-          {typing && index === paragraphs.length - 1 && (
-            <span className="atlas-typing-cursor" aria-hidden="true" />
-          )}
-        </p>
-      ))}
+    <div className="atlas-rich-text text-sm">
+      {blocks.map((block, index) => {
+        const isLast = index === blocks.length - 1;
+        if (block.type === 'heading') {
+          return (
+            <h3 key={index} data-level={block.level}>
+              {inlineMarkdown(block.content, `heading-${index}`)}
+              {cursor(typing && isLast)}
+            </h3>
+          );
+        }
+        if (block.type === 'quote') {
+          return (
+            <blockquote key={index}>
+              {inlineMarkdown(block.content, `quote-${index}`)}
+              {cursor(typing && isLast)}
+            </blockquote>
+          );
+        }
+        if (block.type === 'list') {
+          const List = block.ordered ? 'ol' : 'ul';
+          return (
+            <List key={index}>
+              {block.items.map((item, itemIndex) => (
+                <li key={itemIndex}>
+                  <span>
+                    {inlineMarkdown(item, `list-${index}-${itemIndex}`)}
+                    {cursor(
+                      typing && isLast && itemIndex === block.items.length - 1,
+                    )}
+                  </span>
+                </li>
+              ))}
+            </List>
+          );
+        }
+        return (
+          <p key={index} className="whitespace-pre-line">
+            {inlineMarkdown(block.content, `paragraph-${index}`)}
+            {cursor(typing && isLast)}
+          </p>
+        );
+      })}
+      {!blocks.length && cursor(typing)}
     </div>
   );
+}
+
+function visualizationForQuestion(
+  question: string,
+  previousContext: string,
+  selection: {
+    analysisLevel: 'state' | 'municipality' | 'school';
+    municipality: string;
+    comparisonMunicipality: string;
+    compareMunicipalities: boolean;
+    schoolCode: string;
+  },
+): AssistantVisualization | undefined {
+  const normalized = question
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase();
+  const explicitlyRequested = /\b(?:graficos?|visualiz\w*|chart)\b/.test(
+    normalized,
+  );
+  const quantitativeQuestion =
+    explicitlyRequested ||
+    /\b(?:compar\w*|evolu\w*|histor\w*|panorama|indicadores?|medias?|notas?|desempenho|gargalos?)\b/.test(
+      normalized,
+    );
+  if (!quantitativeQuestion) return undefined;
+
+  const normalizedContext = previousContext
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase();
+  function visualizationType(subject: string) {
+    if (
+      /\b(?:infraestrutura|gargalos?|climatiz\w*|acessib\w*|biblioteca|laboratorio|internet|quadra)\b/.test(
+        subject,
+      )
+    ) {
+      return 'infrastructure' as const;
+    }
+    if (
+      /\b(?:enem|desempenho|notas?|medias?|redacao|matematica|linguagens|humanas|natureza)\b/.test(
+        subject,
+      )
+    ) {
+      return 'performance' as const;
+    }
+    return undefined;
+  }
+
+  // A pergunta atual sempre tem prioridade. O histórico só resolve pedidos
+  // sem assunto explícito, como "mostre isso em um gráfico".
+  const type =
+    visualizationType(normalized) ??
+    (explicitlyRequested ? visualizationType(normalizedContext) : undefined);
+  if (!type) return undefined;
+
+  if (selection.analysisLevel === 'school') {
+    return {
+      type,
+      primary: { kind: 'school', schoolCode: selection.schoolCode },
+    };
+  }
+  if (selection.analysisLevel === 'municipality') {
+    return {
+      type,
+      primary: {
+        kind: 'municipality',
+        municipality: selection.municipality,
+      },
+      secondary:
+        selection.compareMunicipalities && selection.comparisonMunicipality
+          ? {
+              kind: 'municipality',
+              municipality: selection.comparisonMunicipality,
+            }
+          : undefined,
+    };
+  }
+  return { type, primary: { kind: 'state' } };
 }
 
 function ThinkingIndicator({ status }: { status: string }) {
@@ -330,6 +540,20 @@ export default function AssistantPage() {
         }
         if (event.type === 'done') {
           completed = true;
+          const visualization = visualizationForQuestion(
+            clean,
+            history
+              .slice(-2)
+              .map((turn) => turn.text)
+              .join(' '),
+            {
+              analysisLevel: atlas.analysisLevel,
+              municipality: atlas.municipality,
+              comparisonMunicipality: atlas.comparisonMunicipality,
+              compareMunicipalities: atlas.compareMunicipalities,
+              schoolCode: context.school.code,
+            },
+          );
           setMessages((current) =>
             current.map((message) =>
               message.id === assistantId
@@ -340,6 +564,7 @@ export default function AssistantPage() {
                     engine: event.engine,
                     iterations: event.iterations,
                     evidenceCount: event.evidenceCount,
+                    visualization,
                   }
                 : message,
             ),
@@ -523,12 +748,20 @@ export default function AssistantPage() {
                           typing={message.id === streamingMessageId}
                         />
                         {message.visualization && (
-                          <div className="mt-4 min-w-0 rounded-xl border border-[var(--line)] bg-[var(--surface)] p-2 sm:p-3">
-                            <MessageVisualization
-                              visualization={message.visualization}
-                              year={atlas.year}
-                            />
-                          </div>
+                          <figure className="atlas-answer-chart">
+                            <figcaption>
+                              <BarChart3 size={15} aria-hidden="true" />
+                              {message.visualization.type === 'infrastructure'
+                                ? 'Indicadores de infraestrutura'
+                                : 'Desempenho por área'}
+                            </figcaption>
+                            <div className="min-w-0 p-2 sm:p-3">
+                              <MessageVisualization
+                                visualization={message.visualization}
+                                year={atlas.year}
+                              />
+                            </div>
+                          </figure>
                         )}
                       </div>
                       {message.role === 'assistant' && message.source && (
@@ -537,7 +770,7 @@ export default function AssistantPage() {
                             size={12}
                             className="shrink-0 text-[var(--teal)]"
                           />
-                          <span className="truncate">{message.source}</span>
+                          <span>{message.source}</span>
                         </p>
                       )}
                     </div>

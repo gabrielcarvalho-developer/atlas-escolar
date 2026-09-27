@@ -7,6 +7,7 @@ from agent.graph import (
     _collapse_repeated_blocks,
     _conversational_answer,
     _grounded_resource_answer,
+    _focused_evidence,
     _interpret_reflector_output,
     _normalize_plan_for_context,
     _openai_compatible_base_url,
@@ -239,6 +240,69 @@ def test_reflector_accepts_multiline_markdown_without_json() -> None:
 
     assert result["is_complete"] is True
     assert result["final_answer"] == markdown
+
+
+def test_enem_question_hides_unrequested_infrastructure_evidence() -> None:
+    evidence = [
+        {
+            "step_id": 1,
+            "results": [
+                {
+                    "tool": "get_school_profile",
+                    "result": {
+                        "name": "Escola Teste",
+                        "averages": {"mt": 500},
+                        "participants": {"mt": 40},
+                        "infrastructure": {"connectivity": 7.5},
+                        "resources": {"internet": True},
+                        "history": [
+                            {
+                                "year": 2025,
+                                "averages": {"mt": 500},
+                                "infrastructure": {"connectivity": 7.5},
+                            }
+                        ],
+                    },
+                }
+            ],
+        }
+    ]
+
+    focused = _focused_evidence("Quais são as médias do ENEM?", evidence)
+    result = focused[0]["results"][0]["result"]
+
+    assert result["averages"] == {"mt": 500}
+    assert "infrastructure" not in result
+    assert "resources" not in result
+    assert "infrastructure" not in result["history"][0]
+
+
+def test_infrastructure_question_hides_unrequested_enem_evidence() -> None:
+    evidence = [
+        {
+            "step_id": 1,
+            "results": [
+                {
+                    "tool": "get_school_profile",
+                    "result": {
+                        "name": "Escola Teste",
+                        "averages": {"mt": 500},
+                        "participants": {"mt": 40},
+                        "infrastructure": {"connectivity": 7.5},
+                        "resources": {"internet": True},
+                    },
+                }
+            ],
+        }
+    ]
+
+    focused = _focused_evidence("Qual é o gargalo de infraestrutura?", evidence)
+    result = focused[0]["results"][0]["result"]
+
+    assert result["infrastructure"] == {"connectivity": 7.5}
+    assert result["resources"] == {"internet": True}
+    assert "averages" not in result
+    assert "participants" not in result
 
 
 def test_reflector_replan_marker_preserves_evidence() -> None:

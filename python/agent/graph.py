@@ -331,6 +331,111 @@ def _grounded_resource_answer(
     return "\n\n".join(sections)
 
 
+def _question_data_focus(question: str) -> str | None:
+    """Identifica quando a pergunta atual está restrita a um domínio de dados."""
+    folded = _fold_text(question)
+    asks_enem = any(
+        term in folded
+        for term in (
+            "enem",
+            "redacao",
+            "matematica",
+            "ciencias da natureza",
+            "ciencias humanas",
+            "linguagens",
+        )
+    )
+    asks_infrastructure = any(
+        term in folded
+        for term in (
+            "infraestrutura",
+            "recurso",
+            "gargalo",
+            "climatiz",
+            "acessib",
+            "biblioteca",
+            "laboratorio",
+            "internet",
+            "quadra",
+        )
+    )
+    if asks_enem and not asks_infrastructure:
+        return "enem"
+    if asks_infrastructure and not asks_enem:
+        return "infrastructure"
+    return None
+
+
+def _focus_result(result: dict[str, Any], focus: str) -> dict[str, Any]:
+    """Remove do contexto do redator campos de um domínio não solicitado."""
+    focused = dict(result)
+    if focus == "enem":
+        for key in (
+            "infrastructure",
+            "infrastructureScore",
+            "criticalFactor",
+            "resources",
+        ):
+            focused.pop(key, None)
+    else:
+        for key in (
+            "records",
+            "participants",
+            "averages",
+            "enemRecords",
+            "enemSchoolCount",
+            "linkedEnemSchoolCount",
+            "unlinkedEnemSchoolCount",
+            "linkedCoveragePercentage",
+            "unlinkedPercentage",
+        ):
+            focused.pop(key, None)
+
+    history = focused.get("history")
+    if isinstance(history, list):
+        focused["history"] = [
+            _focus_result(point, focus) if isinstance(point, dict) else point
+            for point in history
+        ]
+
+    comparison = focused.get("comparisonWithPrevious")
+    if isinstance(comparison, dict):
+        comparison = dict(comparison)
+        comparison.pop("infrastructure" if focus == "enem" else "enem", None)
+        focused["comparisonWithPrevious"] = comparison
+
+    schools = focused.get("schools")
+    if isinstance(schools, list):
+        focused["schools"] = [
+            _focus_result(school, focus) if isinstance(school, dict) else school
+            for school in schools
+        ]
+    return focused
+
+
+def _focused_evidence(
+    question: str, evidence: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
+    """Entrega ao redator apenas o domínio pedido quando o recorte é inequívoco."""
+    focus = _question_data_focus(question)
+    if focus is None:
+        return evidence
+
+    focused_evidence: list[dict[str, Any]] = []
+    for step in evidence:
+        focused_step = dict(step)
+        results = []
+        for item in step.get("results", []):
+            focused_item = dict(item)
+            result = item.get("result")
+            if isinstance(result, dict):
+                focused_item["result"] = _focus_result(result, focus)
+            results.append(focused_item)
+        focused_step["results"] = results
+        focused_evidence.append(focused_step)
+    return focused_evidence
+
+
 def _normalize_plan_for_context(
     steps: list[PlanStep], state: AgentState
 ) -> list[PlanStep]:
@@ -640,7 +745,11 @@ async def reflector_node(state: AgentState) -> dict[str, Any]:
     """Reflector: evaluates evidence sufficiency and produces answer or replan."""
     llm = _get_llm()
 
-    evidence_summary = json.dumps(state.evidence, ensure_ascii=False, default=str)[:8000]
+    evidence_summary = json.dumps(
+        _focused_evidence(state.question, state.evidence),
+        ensure_ascii=False,
+        default=str,
+    )[:8000]
     plan_summary = json.dumps(
         [{"id": s.id, "description": s.description, "completed": s.completed} for s in state.plan],
         ensure_ascii=False,

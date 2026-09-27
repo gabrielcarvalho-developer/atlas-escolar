@@ -379,6 +379,138 @@ textarea,
   color: #fff;
 }
 
+.atlas-rich-text {
+  line-height: 1.75;
+  overflow-wrap: anywhere;
+}
+
+.atlas-rich-text > * + * {
+  margin-top: 0.85rem;
+}
+
+.atlas-rich-text h3 {
+  color: var(--ink);
+  font-size: 0.95rem;
+  font-weight: 800;
+  letter-spacing: -0.012em;
+  line-height: 1.45;
+}
+
+.atlas-rich-text h3:not(:first-child) {
+  margin-top: 1.25rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--line);
+}
+
+.atlas-rich-text ul,
+.atlas-rich-text ol {
+  display: grid;
+  gap: 0.55rem;
+  padding: 0;
+  list-style: none;
+}
+
+.atlas-rich-text li {
+  display: grid;
+  grid-template-columns: 1.15rem minmax(0, 1fr);
+  align-items: start;
+  gap: 0.55rem;
+}
+
+.atlas-rich-text ul > li::before {
+  width: 0.42rem;
+  height: 0.42rem;
+  margin: 0.68rem auto 0;
+  border-radius: 999px;
+  background: var(--teal);
+  box-shadow: 0 0 0 4px var(--teal-soft);
+  content: '';
+}
+
+.atlas-rich-text ol {
+  counter-reset: atlas-list;
+}
+
+.atlas-rich-text ol > li {
+  counter-increment: atlas-list;
+}
+
+.atlas-rich-text ol > li::before {
+  display: grid;
+  width: 1.15rem;
+  height: 1.15rem;
+  margin-top: 0.28rem;
+  place-items: center;
+  border-radius: 999px;
+  background: var(--teal-soft);
+  color: var(--teal);
+  content: counter(atlas-list);
+  font-size: 0.65rem;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.atlas-rich-text blockquote {
+  border-left: 3px solid var(--teal);
+  border-radius: 0 10px 10px 0;
+  background: var(--teal-soft);
+  padding: 0.65rem 0.85rem;
+}
+
+.atlas-rich-text-code {
+  border: 1px solid var(--line);
+  border-radius: 0.35rem;
+  background: var(--surface-soft);
+  padding: 0.08rem 0.32rem;
+  font-family: var(--font-mono, monospace);
+  font-size: 0.84em;
+}
+
+.atlas-chat-bubble[data-role='user'] .atlas-rich-text h3 {
+  color: inherit;
+}
+
+.atlas-chat-bubble[data-role='user'] .atlas-rich-text ul > li::before {
+  background: #fff;
+  box-shadow: 0 0 0 4px rgb(255 255 255 / 15%);
+}
+
+.atlas-chat-bubble[data-role='user'] .atlas-rich-text ol > li::before,
+.atlas-chat-bubble[data-role='user'] .atlas-rich-text blockquote,
+.atlas-chat-bubble[data-role='user'] .atlas-rich-text-code {
+  border-color: rgb(255 255 255 / 18%);
+  background: rgb(255 255 255 / 12%);
+  color: inherit;
+}
+
+.atlas-answer-chart {
+  min-width: 0;
+  margin-top: 1.15rem;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 1rem;
+  background: var(--surface);
+  box-shadow: 0 8px 22px rgb(18 22 32 / 5%);
+}
+
+.atlas-answer-chart figcaption {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface-soft);
+  padding: 0.7rem 0.85rem;
+  color: var(--muted);
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.atlas-answer-chart figcaption svg {
+  color: var(--teal);
+}
+
 @keyframes atlas-thinking-dot {
   0%,
   60%,
