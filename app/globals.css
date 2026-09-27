@@ -381,7 +381,12 @@ textarea,
 
 .atlas-rich-text {
   line-height: 1.75;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
+  word-break: normal;
+}
+
+.atlas-chat-bubble[data-role='assistant'] .atlas-rich-text {
+  min-width: min(100%, 16rem);
 }
 
 .atlas-rich-text > * + * {
@@ -415,6 +420,10 @@ textarea,
   grid-template-columns: 1.15rem minmax(0, 1fr);
   align-items: start;
   gap: 0.55rem;
+}
+
+.atlas-rich-text li > span {
+  min-width: 0;
 }
 
 .atlas-rich-text > ul > li::before {

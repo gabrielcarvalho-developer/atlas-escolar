@@ -765,7 +765,7 @@ export default function AssistantPage() {
                       </div>
                     )}
                     <div
-                      className={`flex min-w-0 max-w-[calc(100%-46px)] flex-col sm:max-w-[86%] ${message.role === 'user' ? 'items-end' : 'items-start'}`}
+                      className={`flex min-w-0 max-w-[calc(100%-46px)] flex-col sm:max-w-[86%] ${message.role === 'user' ? 'items-end' : 'w-full items-start'}`}
                     >
                       <div
                         className={`mb-1.5 flex min-w-0 items-baseline gap-2 px-1 ${message.role === 'user' ? 'flex-row-reverse' : ''}`}
