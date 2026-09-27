@@ -553,7 +553,7 @@ export default function AssistantPage() {
                     }}
                     placeholder="Pergunte ao Atlas..."
                     aria-label="Faça sua pergunta ao Atlas"
-                    className="max-h-32 min-h-11 resize-none border-0 bg-transparent px-2 py-2.5 text-sm leading-6 shadow-none focus-visible:outline-none focus-visible:ring-0"
+                    className="max-h-32 min-h-11 resize-none border-0 bg-transparent px-2 py-2.5 text-sm leading-6 shadow-none focus-visible:outline-none focus-visible:ring-0 dark:bg-transparent"
                   />
                   <Button
                     type="submit"
