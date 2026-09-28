@@ -695,6 +695,30 @@ export function VisxLineChart({
                     stroke="var(--chart-grid)"
                   />
                 )}
+                <AxisBottom
+                  scale={xScale}
+                  top={innerHeight}
+                  stroke="var(--chart-grid)"
+                  hideTicks
+                  tickLabelProps={() => ({
+                    ...axisTickLabelProps,
+                    textAnchor: 'middle',
+                    dy: 10,
+                  })}
+                />
+                <AxisLeft
+                  scale={yScale}
+                  tickValues={ticks}
+                  tickFormat={(value) => tickFormat(Number(value))}
+                  hideAxisLine
+                  hideTicks
+                  tickLabelProps={() => ({
+                    ...axisTickLabelProps,
+                    textAnchor: 'end',
+                    dx: -4,
+                    dy: 3,
+                  })}
+                />
                 {series.map(({ key }) => (
                   <React.Fragment key={key}>
                     <LinePath<ChartDatum>
@@ -787,30 +811,6 @@ export function VisxLineChart({
                     />
                   );
                 })}
-                <AxisBottom
-                  scale={xScale}
-                  top={innerHeight}
-                  stroke="var(--chart-grid)"
-                  hideTicks
-                  tickLabelProps={() => ({
-                    ...axisTickLabelProps,
-                    textAnchor: 'middle',
-                    dy: 10,
-                  })}
-                />
-                <AxisLeft
-                  scale={yScale}
-                  tickValues={ticks}
-                  tickFormat={(value) => tickFormat(Number(value))}
-                  hideAxisLine
-                  hideTicks
-                  tickLabelProps={() => ({
-                    ...axisTickLabelProps,
-                    textAnchor: 'end',
-                    dx: -4,
-                    dy: 3,
-                  })}
-                />
               </Group>
             </svg>
             {legend && (
