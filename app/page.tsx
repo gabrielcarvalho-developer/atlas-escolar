@@ -576,18 +576,20 @@ function TerritoryOverview({
               <MonitorSmartphone size={19} />
             </span>
           </div>
-          <div className="mt-auto grid gap-3 border-t border-[var(--line)] pt-4 text-xs">
-            <div className="flex justify-between gap-4">
-              <span className="text-[var(--muted)]">Salas climatizadas</span>
-              <strong className="font-medium">
-                {formatPercentage(primary.indicators.climateRooms)}
-              </strong>
-            </div>
-            <div className="flex justify-between gap-4">
-              <span className="text-[var(--muted)]">Salas acessíveis</span>
-              <strong className="font-medium">
-                {formatPercentage(primary.indicators.accessibleRooms)}
-              </strong>
+          <div className="mt-auto pt-5">
+            <div className="grid gap-3 border-t border-[var(--line)] pt-4 text-xs">
+              <div className="flex justify-between gap-4">
+                <span className="text-[var(--muted)]">Salas climatizadas</span>
+                <strong className="font-medium">
+                  {formatPercentage(primary.indicators.climateRooms)}
+                </strong>
+              </div>
+              <div className="flex justify-between gap-4">
+                <span className="text-[var(--muted)]">Salas acessíveis</span>
+                <strong className="font-medium">
+                  {formatPercentage(primary.indicators.accessibleRooms)}
+                </strong>
+              </div>
             </div>
           </div>
         </article>
