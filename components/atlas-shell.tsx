@@ -82,7 +82,7 @@ function Filters({ onDone }: { onDone?: () => void }) {
                 type="button"
                 onClick={() => atlas.setAnalysisLevel(value)}
                 aria-pressed={active}
-                className={`relative z-10 min-h-9 min-w-0 rounded-full px-1.5 text-[11px] font-semibold transition-colors duration-300 ${
+                className={`relative z-10 min-h-9 min-w-0 rounded-full px-1.5 text-[11px] font-medium transition-colors duration-300 ${
                   active
                     ? 'text-[var(--ink)]'
                     : 'text-[var(--muted)] hover:text-[var(--ink)]'
@@ -190,7 +190,7 @@ function Filters({ onDone }: { onDone?: () => void }) {
         <div className="flex items-center justify-between gap-3 rounded-xl border border-[var(--line)] bg-[var(--surface-soft)] p-3">
           <div className="flex min-w-0 items-center gap-2.5">
             <ArrowLeftRight className="shrink-0 text-[var(--teal)]" size={15} />
-            <p className="text-xs font-semibold">Comparar municípios</p>
+            <p className="text-xs font-medium">Comparar municípios</p>
           </div>
           <Switch
             checked={atlas.compareMunicipalities}
@@ -203,7 +203,7 @@ function Filters({ onDone }: { onDone?: () => void }) {
       {atlas.analysisLevel === 'school' && (
         <div className="flex items-center justify-between gap-3 rounded-xl border border-[var(--line)] bg-[var(--surface-soft)] p-3">
           <div className="min-w-0">
-            <p className="text-xs font-semibold">Referência municipal</p>
+            <p className="text-xs font-medium">Referência municipal</p>
             <p className="mt-0.5 text-[10px] text-[var(--muted)]">
               Comparar nos gráficos
             </p>
@@ -233,7 +233,7 @@ function Brand() {
       aria-label="Atlas — página inicial"
     >
       <span>
-        <span className="block text-base font-bold tracking-[-0.03em]">Atlas</span>
+        <span className="block text-base font-semibold tracking-[-0.03em]">Atlas</span>
         <span className="mt-0.5 block text-[11px] text-[var(--muted)]">
           Inteligência educacional
         </span>
@@ -310,7 +310,7 @@ export function AtlasShell({ children }: { children: React.ReactNode }) {
         </div>
 
         <div className="flex-1 px-3 py-5">
-          <p className="mb-2 px-3 text-[10px] font-semibold uppercase tracking-[0.13em] text-[var(--muted)]">
+          <p className="mb-2 px-3 text-[10px] font-medium uppercase tracking-[0.13em] text-[var(--muted)]">
             Navegação
           </p>
           <nav className="space-y-1" aria-label="Navegação principal">
@@ -323,7 +323,7 @@ export function AtlasShell({ children }: { children: React.ReactNode }) {
                   aria-current={active ? 'page' : undefined}
                   className={`group flex min-h-10 items-center gap-3 rounded-xl px-3 text-[13px] transition ${
                     active
-                      ? 'bg-[var(--surface-soft)] font-semibold text-[var(--ink)]'
+                      ? 'bg-[var(--surface-soft)] font-medium text-[var(--ink)]'
                       : 'text-[var(--muted)] hover:bg-[var(--surface-soft)] hover:text-[var(--ink)]'
                   }`}
                 >
@@ -396,11 +396,11 @@ export function AtlasShell({ children }: { children: React.ReactNode }) {
             <div className="hidden items-center gap-2 text-xs text-[var(--muted)] sm:flex">
               <span>Dashboard</span>
               <span className="text-[var(--line-strong)]">/</span>
-              <span className="font-semibold text-[var(--ink)]">
+              <span className="font-medium text-[var(--ink)]">
                 {PAGE_NAMES[pathname] ?? 'Atlas'}
               </span>
             </div>
-            <span className="truncate text-sm font-semibold sm:hidden">
+            <span className="truncate text-sm font-medium sm:hidden">
               {PAGE_NAMES[pathname] ?? 'Atlas'}
             </span>
           </div>

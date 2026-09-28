@@ -87,7 +87,7 @@ export default function ActionPlanPage() {
               Comece pelos sinais que mais pedem atenção na escola selecionada.
             </p>
           </div>
-          <div className="flex w-fit items-center gap-2 rounded-full border border-[var(--line)] bg-white px-3.5 py-2 text-xs font-bold text-[var(--muted)] shadow-sm">
+          <div className="flex w-fit items-center gap-2 rounded-full border border-[var(--line)] bg-white px-3.5 py-2 text-xs font-semibold text-[var(--muted)] shadow-sm">
             <ListChecks size={15} className="text-[var(--teal)]" />
             {improvements.length} prioridades identificadas
           </div>
@@ -106,7 +106,7 @@ export default function ActionPlanPage() {
             <div className="shrink-0">
               <Button
                 onClick={downloadReport}
-                className="h-11 w-full rounded-xl bg-[var(--navy)] px-5 font-bold text-white hover:bg-[var(--teal)] sm:w-fit dark:border dark:border-[var(--line-strong)]"
+                className="h-11 w-full rounded-xl bg-[var(--navy)] px-5 font-semibold text-white hover:bg-[var(--teal)] sm:w-fit dark:border dark:border-[var(--line-strong)]"
               >
                 {downloaded ? (
                   <>
@@ -140,23 +140,23 @@ export default function ActionPlanPage() {
                           <Icon size={20} />
                         </div>
                         <div className="min-w-0">
-                          <p className="text-[11px] font-extrabold uppercase tracking-[0.14em] text-[var(--teal)]">
+                          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--teal)]">
                             Prioridade {improvement.number}
                           </p>
-                          <span className="mt-1.5 inline-flex max-w-full rounded-full bg-[#eaf3c8] px-3 py-1 text-[11px] font-bold leading-snug text-[#536a14]">
+                          <span className="mt-1.5 inline-flex max-w-full rounded-full bg-[#eaf3c8] px-3 py-1 text-[11px] font-semibold leading-snug text-[#536a14]">
                             {improvement.impact}
                           </span>
                         </div>
                       </div>
                       <span
                         aria-hidden="true"
-                        className="select-none text-4xl font-extrabold leading-none tracking-[-0.06em] text-[var(--teal)]/10 sm:text-5xl"
+                        className="select-none text-4xl font-semibold leading-none tracking-[-0.06em] text-[var(--teal)]/10 sm:text-5xl"
                       >
                         {improvement.number}
                       </span>
                     </div>
 
-                    <h3 className="mt-7 text-2xl font-extrabold leading-tight tracking-[-0.04em] sm:text-[1.75rem]">
+                    <h3 className="mt-7 text-2xl font-semibold leading-tight tracking-[-0.04em] sm:text-[1.75rem]">
                       {improvement.title}
                     </h3>
                     <p className="mt-3 max-w-xl text-sm leading-relaxed text-[var(--muted)] sm:text-[15px]">
@@ -169,10 +169,10 @@ export default function ActionPlanPage() {
                       <MapPin size={16} />
                     </span>
                     <div className="min-w-0">
-                      <p className="text-[10px] font-extrabold uppercase tracking-[0.12em] text-[var(--muted)]">
+                      <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-[var(--muted)]">
                         Referência municipal
                       </p>
-                      <p className="mt-1 text-sm font-bold leading-relaxed text-[var(--ink)]">
+                      <p className="mt-1 text-sm font-semibold leading-relaxed text-[var(--ink)]">
                         {improvement.reference}
                       </p>
                     </div>

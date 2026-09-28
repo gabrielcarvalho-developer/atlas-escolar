@@ -195,7 +195,7 @@ function IndicatorRow({
           <Icon size={14} className="shrink-0 text-[var(--muted)]" />
           <span className="truncate">{label}</span>
         </span>
-        <span className="font-semibold tabular-nums">
+        <span className="font-medium tabular-nums">
           {formatPercentage(value)}
         </span>
       </div>
@@ -275,7 +275,7 @@ function HistoricalOverview({ history }: { history: HistoricalPoint[] }) {
               type="button"
               aria-pressed={isPerformance}
               onClick={() => setActiveView('performance')}
-              className={`relative z-10 inline-flex min-h-9 min-w-0 items-center justify-center gap-2 rounded-full px-4 text-[11px] font-semibold transition-colors duration-300 sm:min-w-40 ${
+              className={`relative z-10 inline-flex min-h-9 min-w-0 items-center justify-center gap-2 rounded-full px-4 text-[11px] font-medium transition-colors duration-300 sm:min-w-40 ${
                 isPerformance
                   ? 'text-[var(--ink)]'
                   : 'text-[var(--muted)] hover:text-[var(--ink)]'
@@ -288,7 +288,7 @@ function HistoricalOverview({ history }: { history: HistoricalPoint[] }) {
               type="button"
               aria-pressed={!isPerformance}
               onClick={() => setActiveView('infrastructure')}
-              className={`relative z-10 inline-flex min-h-9 min-w-0 items-center justify-center gap-2 rounded-full px-4 text-[11px] font-semibold transition-colors duration-300 sm:min-w-40 ${
+              className={`relative z-10 inline-flex min-h-9 min-w-0 items-center justify-center gap-2 rounded-full px-4 text-[11px] font-medium transition-colors duration-300 sm:min-w-40 ${
                 !isPerformance
                   ? 'text-[var(--ink)]'
                   : 'text-[var(--muted)] hover:text-[var(--ink)]'
@@ -368,7 +368,7 @@ function TerritoryOverview({
     <div className="atlas-page">
       <section className="flex flex-col justify-between gap-5 md:flex-row md:items-end">
         <div>
-          <div className="mb-3 flex items-center gap-2 text-[11px] font-semibold text-[var(--teal)]">
+          <div className="mb-3 flex items-center gap-2 text-[11px] font-medium text-[var(--teal)]">
             <Sparkles size={14} />
             {secondary ? 'Comparativo municipal' : primary.eyebrow}
           </div>
@@ -423,11 +423,11 @@ function TerritoryOverview({
               key={territory.name}
               className="atlas-card flex items-center gap-4 p-4"
             >
-              <span className="grid size-9 shrink-0 place-items-center rounded-full bg-[var(--teal-soft)] text-xs font-bold text-[var(--teal)]">
+              <span className="grid size-9 shrink-0 place-items-center rounded-full bg-[var(--teal-soft)] text-xs font-semibold text-[var(--teal)]">
                 {index === 0 ? 'A' : 'B'}
               </span>
               <div className="min-w-0">
-                <p className="truncate text-sm font-semibold">
+                <p className="truncate text-sm font-medium">
                   {territory.name}
                 </p>
                 <p className="mt-1 text-[11px] text-[var(--muted)]">
@@ -462,14 +462,14 @@ function TerritoryOverview({
         </article>
 
         <article className="atlas-card relative flex h-full flex-col overflow-hidden p-5 sm:p-6 dark:bg-[var(--navy)] dark:text-white">
-          <p className="relative text-sm font-semibold text-[var(--muted)] dark:text-white/65">
+          <p className="relative text-sm font-medium text-[var(--muted)] dark:text-white/65">
             Leitura em destaque
           </p>
           <div className="relative mt-8">
             <span className="grid size-10 place-items-center rounded-full bg-[var(--teal-soft)] text-[var(--teal)] dark:bg-white/10 dark:text-[var(--lime)]">
               <Wifi size={18} />
             </span>
-            <p className="mt-5 text-3xl font-bold tracking-[-0.05em]">
+            <p className="mt-5 text-3xl font-semibold tracking-[-0.05em]">
               {formatNumber(connectivityGap, 1)} p.p.
             </p>
             <p className="mt-2 text-sm font-medium">de diferença no acesso</p>
@@ -493,7 +493,7 @@ function TerritoryOverview({
                 <span className="text-[var(--muted)] dark:text-white/65">
                   {label}
                 </span>
-                <span className="font-semibold">
+                <span className="font-medium">
                   {formatPercentage(Number(value))}
                 </span>
               </div>
@@ -557,7 +557,7 @@ function TerritoryOverview({
                 <p className="text-[10px] leading-tight text-[var(--muted)]">
                   {label}
                 </p>
-                <p className="mt-2 text-lg font-bold tracking-[-0.04em]">
+                <p className="mt-2 text-lg font-semibold tracking-[-0.04em]">
                   {formatNumber(Number(value))}
                 </p>
               </div>
@@ -568,7 +568,7 @@ function TerritoryOverview({
               <p className="text-[11px] text-[var(--muted)]">
                 Dispositivos para alunos
               </p>
-              <p className="mt-1 text-2xl font-bold tracking-[-0.04em]">
+              <p className="mt-1 text-2xl font-semibold tracking-[-0.04em]">
                 {formatNumber(deviceTotal)}
               </p>
             </div>
@@ -579,13 +579,13 @@ function TerritoryOverview({
           <div className="mt-auto grid gap-3 border-t border-[var(--line)] pt-4 text-xs">
             <div className="flex justify-between gap-4">
               <span className="text-[var(--muted)]">Salas climatizadas</span>
-              <strong>
+              <strong className="font-medium">
                 {formatPercentage(primary.indicators.climateRooms)}
               </strong>
             </div>
             <div className="flex justify-between gap-4">
               <span className="text-[var(--muted)]">Salas acessíveis</span>
-              <strong>
+              <strong className="font-medium">
                 {formatPercentage(primary.indicators.accessibleRooms)}
               </strong>
             </div>
@@ -634,7 +634,7 @@ function TerritoryOverview({
                         ? '9º ano'
                         : 'Ensino Médio'}
                   </p>
-                  <p className="mt-1 text-sm font-bold">
+                  <p className="mt-1 text-sm font-semibold">
                     {row.TAXA_PARTICIPACAO_AGREGADA === null
                       ? '—'
                       : formatPercentage(row.TAXA_PARTICIPACAO_AGREGADA)}
@@ -715,7 +715,7 @@ export default function OverviewPage() {
       <div className="atlas-page">
         <section className="flex flex-col justify-between gap-5 md:flex-row md:items-end">
           <div>
-            <div className="mb-3 flex flex-wrap items-center gap-2 text-[11px] font-semibold text-[var(--teal)]">
+            <div className="mb-3 flex flex-wrap items-center gap-2 text-[11px] font-medium text-[var(--teal)]">
               <School size={14} /> Panorama da escola
               <span className="text-[var(--line-strong)]">·</span>
               <span className="text-[var(--muted)]">
@@ -725,14 +725,6 @@ export default function OverviewPage() {
             <h1 className="atlas-page-heading max-w-4xl">
               {context.school.name}
             </h1>
-            <div className="mt-3 flex flex-wrap gap-2 text-[10px] text-[var(--muted)]">
-              <span className="rounded-full bg-[var(--surface-soft)] px-3 py-1.5">
-                {context.school.dependency}
-              </span>
-              <span className="rounded-full bg-[var(--surface-soft)] px-3 py-1.5">
-                {context.school.location}
-              </span>
-            </div>
           </div>
           <div className="flex w-fit items-center gap-2 rounded-full border border-[var(--line)] bg-[var(--surface)] px-3 py-2 text-[11px] text-[var(--muted)]">
             <Database size={13} className="text-[var(--teal)]" /> Dados de{' '}
@@ -782,7 +774,7 @@ export default function OverviewPage() {
               size={18}
             />
             <p>
-              <strong className="font-semibold">Leitura com cautela.</strong>{' '}
+              <strong className="font-medium">Leitura com cautela.</strong>{' '}
               {context.lowSampleAreas
                 .map((area) => `${area.label} (${area.schoolParticipants})`)
                 .join(', ')}{' '}
@@ -857,7 +849,7 @@ export default function OverviewPage() {
                     <div className="mb-2 flex items-center justify-between gap-3 text-xs">
                       <span className="font-medium">{INFRA_LABELS[key]}</span>
                       <span
-                        className="text-[10px] font-semibold"
+                        className="text-[10px] font-medium"
                         style={{ color: status.color }}
                       >
                         {status.label} · {formatPercentage(value)}
@@ -881,7 +873,7 @@ export default function OverviewPage() {
         <section className="relative mt-5 overflow-hidden rounded-[20px] bg-[var(--navy)] p-6 text-white sm:p-8">
           <div className="relative flex flex-col justify-between gap-6 lg:flex-row lg:items-center">
             <div>
-              <p className="text-xl font-semibold tracking-[-0.035em]">
+              <p className="text-xl font-medium tracking-[-0.035em]">
                 Transforme a leitura em ação
               </p>
               <p className="mt-2 max-w-xl text-sm leading-relaxed text-white/55">
@@ -891,7 +883,7 @@ export default function OverviewPage() {
             </div>
             <Link
               href="/plano-de-acao"
-              className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-[var(--lime)] px-5 text-sm font-semibold text-[var(--navy)] transition hover:bg-white"
+              className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-[var(--lime)] px-5 text-sm font-medium text-[var(--navy)] transition hover:bg-white"
             >
               Abrir plano de ação <ArrowRight size={16} />
             </Link>

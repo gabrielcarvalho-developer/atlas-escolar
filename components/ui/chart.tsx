@@ -148,17 +148,17 @@ function TooltipContent({
     return (
       <div className="w-full rounded-xl border border-[var(--line)] bg-[var(--surface)]/95 p-2.5 shadow-lg backdrop-blur-md">
         <div className="text-center">
-          <p className="text-[9px] font-bold uppercase tracking-[0.18em] text-[var(--teal)]">
+          <p className="text-[9px] font-semibold uppercase tracking-[0.18em] text-[var(--teal)]">
             Comparação
           </p>
           {data.comparisonRange ? (
-            <p className="mt-1 flex items-center justify-center gap-2 text-xs font-semibold text-[var(--ink)]">
+            <p className="mt-1 flex items-center justify-center gap-2 text-xs font-medium text-[var(--ink)]">
               <span>{data.comparisonRange.previous}</span>
               <ArrowRight aria-hidden="true" size={14} strokeWidth={1.8} />
               <span>{data.comparisonRange.current}</span>
             </p>
           ) : (
-            <p className="mt-1 text-xs font-semibold text-[var(--ink)]">
+            <p className="mt-1 text-xs font-medium text-[var(--ink)]">
               {data.label}
             </p>
           )}
@@ -180,7 +180,7 @@ function TooltipContent({
               </div>
               <p
                 className={cn(
-                  'mt-0.5 text-xs font-bold tabular-nums',
+                  'mt-0.5 text-xs font-semibold tabular-nums',
                   item.value > 0
                     ? 'text-[var(--positive)]'
                     : item.value < 0

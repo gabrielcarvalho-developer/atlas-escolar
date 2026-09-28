@@ -254,7 +254,7 @@ function RichText({
         const key = `${keyPrefix}-${index}`;
         if (part.startsWith('**') && part.endsWith('**')) {
           return (
-            <strong key={key} className="font-extrabold text-[inherit]">
+            <strong key={key} className="font-semibold text-[inherit]">
               {part.slice(2, -2)}
             </strong>
           );
@@ -722,7 +722,7 @@ export default function AssistantPage() {
                 <span className="absolute -bottom-0.5 -right-0.5 size-3.5 rounded-full border-[3px] border-[var(--surface)] bg-[#62b782]" />
               </div>
               <div className="min-w-0">
-                <h1 className="truncate text-sm font-extrabold sm:text-base">
+                <h1 className="truncate text-sm font-semibold sm:text-base">
                   Assistente Atlas
                 </h1>
                 <p className="mt-0.5 truncate text-[11px] text-[var(--muted)] sm:text-xs">
@@ -731,7 +731,7 @@ export default function AssistantPage() {
               </div>
             </div>
             <div className="flex shrink-0 items-center gap-2">
-              <div className="hidden items-center gap-2 rounded-full border border-[var(--line)] bg-[var(--surface-soft)] px-3 py-2 text-[11px] font-bold text-[var(--muted)] md:flex">
+              <div className="hidden items-center gap-2 rounded-full border border-[var(--line)] bg-[var(--surface-soft)] px-3 py-2 text-[11px] font-semibold text-[var(--muted)] md:flex">
                 <HardDrive size={13} className="text-[var(--teal)]" />
                 Salva neste navegador
               </div>
@@ -775,7 +775,7 @@ export default function AssistantPage() {
                       <div
                         className={`mb-1.5 flex min-w-0 items-baseline gap-2 px-1 ${message.role === 'user' ? 'flex-row-reverse' : ''}`}
                       >
-                        <span className="text-xs font-extrabold text-[var(--ink)]">
+                        <span className="text-xs font-semibold text-[var(--ink)]">
                           {message.role === 'user' ? 'Você' : 'Atlas'}
                         </span>
                         {message.role === 'assistant' && (
@@ -841,7 +841,7 @@ export default function AssistantPage() {
                     </div>
                     <div className="flex min-w-0 flex-col items-start">
                       <div className="mb-1.5 flex min-w-0 items-baseline gap-2 px-1">
-                        <span className="text-xs font-extrabold text-[var(--ink)]">
+                        <span className="text-xs font-semibold text-[var(--ink)]">
                           Atlas
                         </span>
                         <span className="truncate text-[11px] text-[var(--muted)]">
@@ -860,7 +860,7 @@ export default function AssistantPage() {
 
                 {messages.length === 1 && !loading && (
                   <div className="ml-0 border-t border-[var(--line)] pt-5 sm:ml-[52px]">
-                    <p className="mb-3 text-[11px] font-extrabold uppercase tracking-[0.12em] text-[var(--muted)]">
+                    <p className="mb-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--muted)]">
                       Experimente perguntar
                     </p>
                     <div className="flex flex-wrap gap-2">
@@ -869,7 +869,7 @@ export default function AssistantPage() {
                           key={label}
                           type="button"
                           onClick={() => void send(question)}
-                          className="inline-flex min-h-10 items-center gap-2 rounded-full border border-[var(--line)] bg-[var(--surface)] px-3.5 text-xs font-bold text-[var(--ink)] transition hover:border-[var(--teal)] hover:bg-[var(--teal-soft)]"
+                          className="inline-flex min-h-10 items-center gap-2 rounded-full border border-[var(--line)] bg-[var(--surface)] px-3.5 text-xs font-semibold text-[var(--ink)] transition hover:border-[var(--teal)] hover:bg-[var(--teal-soft)]"
                         >
                           <Icon size={14} className="text-[var(--teal)]" />
                           {label}

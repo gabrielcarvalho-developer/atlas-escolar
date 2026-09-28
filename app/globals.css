@@ -5,8 +5,8 @@
 @theme inline {
   --color-background: var(--canvas);
   --color-foreground: var(--ink);
-  --font-sans: var(--font-inter);
-  --font-mono: var(--font-inter);
+  --font-sans: var(--font-manrope);
+  --font-mono: var(--font-manrope);
   --color-border: var(--line);
   --color-input: var(--line);
   --color-ring: var(--teal);
@@ -125,7 +125,7 @@ html {
 body {
   margin: 0;
   background: var(--canvas);
-  font-family: var(--font-inter), Inter, Arial, sans-serif;
+  font-family: var(--font-manrope), Manrope, Arial, sans-serif;
   font-size: 15px;
   font-weight: 400;
   font-synthesis: none;
@@ -173,7 +173,7 @@ textarea,
   display: block;
   color: var(--muted);
   font-size: 11px;
-  font-weight: 700;
+  font-weight: 600;
   letter-spacing: 0.1em;
   text-transform: uppercase;
 }
@@ -188,7 +188,7 @@ textarea,
 .atlas-eyebrow {
   color: var(--teal);
   font-size: 11px;
-  font-weight: 700;
+  font-weight: 600;
   letter-spacing: 0.14em;
   text-transform: uppercase;
 }
@@ -237,14 +237,14 @@ textarea,
 
 .atlas-page-heading {
   font-size: clamp(1.65rem, 2.7vw, 2.35rem);
-  font-weight: 700;
+  font-weight: 600;
   line-height: 1.08;
   letter-spacing: -0.045em;
 }
 
 .atlas-kpi-value {
   font-size: clamp(1.75rem, 7vw, 2.6rem);
-  font-weight: 700;
+  font-weight: 600;
   line-height: 1;
   letter-spacing: -0.05em;
 }
@@ -396,7 +396,7 @@ textarea,
 .atlas-rich-text h3 {
   color: var(--ink);
   font-size: 0.95rem;
-  font-weight: 800;
+  font-weight: 600;
   letter-spacing: -0.012em;
   line-height: 1.45;
 }
@@ -444,7 +444,7 @@ textarea,
 .atlas-rich-text ul ul > li::before {
   color: var(--teal);
   content: '—';
-  font-weight: 800;
+  font-weight: 600;
   line-height: 1.75;
   text-align: center;
 }
@@ -468,7 +468,7 @@ textarea,
   color: var(--teal);
   content: counter(atlas-list);
   font-size: 0.65rem;
-  font-weight: 800;
+  font-weight: 600;
   line-height: 1;
 }
 
@@ -528,7 +528,7 @@ textarea,
   padding: 0.7rem 0.85rem;
   color: var(--muted);
   font-size: 0.7rem;
-  font-weight: 800;
+  font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
@@ -684,7 +684,7 @@ textarea,
 .atlas-metric-value {
   color: var(--ink);
   font-size: clamp(1.75rem, 3vw, 2.25rem);
-  font-weight: 700;
+  font-weight: 600;
   line-height: 1;
   letter-spacing: -0.05em;
 }
