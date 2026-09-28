@@ -7,6 +7,7 @@ import { Group } from '@visx/group';
 import { scaleBand, scaleLinear, scalePoint } from '@visx/scale';
 import { BarRounded, LinePath } from '@visx/shape';
 import { useTooltip } from '@visx/tooltip';
+import { ArrowRight } from 'lucide-react';
 import * as React from 'react';
 
 import { cn } from '@/lib/utils';
@@ -51,6 +52,8 @@ type ChartTooltipDatum = {
   items: Array<ChartLegendItem & { value: number; formattedValue?: string }>;
   index: number;
   xPosition?: number;
+  variant?: 'default' | 'comparison';
+  comparisonRange?: { previous: string; current: string };
 };
 
 type SharedChartProps = {
@@ -141,6 +144,59 @@ function TooltipContent({
   data: ChartTooltipDatum;
   indicator: 'dot' | 'line';
 }) {
+  if (data.variant === 'comparison') {
+    return (
+      <div className="w-full rounded-xl border border-[var(--line)] bg-[var(--surface)]/95 p-2.5 shadow-lg backdrop-blur-md">
+        <div className="text-center">
+          <p className="text-[9px] font-bold uppercase tracking-[0.18em] text-[var(--teal)]">
+            Comparação
+          </p>
+          {data.comparisonRange ? (
+            <p className="mt-1 flex items-center justify-center gap-2 text-xs font-semibold text-[var(--ink)]">
+              <span>{data.comparisonRange.previous}</span>
+              <ArrowRight aria-hidden="true" size={14} strokeWidth={1.8} />
+              <span>{data.comparisonRange.current}</span>
+            </p>
+          ) : (
+            <p className="mt-1 text-xs font-semibold text-[var(--ink)]">
+              {data.label}
+            </p>
+          )}
+        </div>
+
+        <div className="mt-2 flex flex-wrap justify-center gap-1.5">
+          {data.items.map((item) => (
+            <div
+              key={item.key}
+              className="basis-[calc(33.333%-0.25rem)] rounded-lg bg-[var(--surface-soft)] px-1 py-1.5 text-center"
+            >
+              <div className="flex items-center justify-center gap-1 text-[9px] text-[var(--muted)]">
+                <span
+                  aria-hidden="true"
+                  className="size-1.5 shrink-0 rounded-full"
+                  style={{ backgroundColor: item.color }}
+                />
+                <span>{item.label}</span>
+              </div>
+              <p
+                className={cn(
+                  'mt-0.5 text-xs font-bold tabular-nums',
+                  item.value > 0
+                    ? 'text-[var(--positive)]'
+                    : item.value < 0
+                      ? 'text-[var(--danger)]'
+                      : 'text-[var(--muted)]',
+                )}
+              >
+                {item.formattedValue ?? item.value.toLocaleString('pt-BR')}
+              </p>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="border-border/50 bg-background grid min-w-48 gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs shadow-xl">
       <div className="font-medium">{data.label}</div>
@@ -186,6 +242,21 @@ function ChartTooltip({
   indicator: 'dot' | 'line';
 }) {
   if (!data || left === undefined || top === undefined) return null;
+
+  if (data.variant === 'comparison') {
+    return (
+      <div
+        className="pointer-events-none absolute z-20 -translate-x-1/2 -translate-y-1/2"
+        style={{
+          left,
+          top,
+          width: Math.min(270, width - 16),
+        }}
+      >
+        <TooltipContent data={data} indicator={indicator} />
+      </div>
+    );
+  }
 
   const boundedLeft = Math.max(
     8,
@@ -563,13 +634,6 @@ export function VisxLineChart({
           const currentLabel = getLabel(currentDatum, xKey);
           const previousX = xScale(previousLabel) ?? 0;
           const currentX = xScale(currentLabel) ?? 0;
-          const values = series.flatMap(({ key }) => {
-            const previousValue = getNumericValue(previousDatum, key);
-            const currentValue = getNumericValue(currentDatum, key);
-            return previousValue === undefined || currentValue === undefined
-              ? []
-              : [previousValue, currentValue];
-          });
           const items = seriesItems.flatMap((item) => {
             const previousValue = getNumericValue(previousDatum, item.key);
             const currentValue = getNumericValue(currentDatum, item.key);
@@ -583,16 +647,20 @@ export function VisxLineChart({
           });
           if (!items.length) return;
 
-          const highestValue = values.length ? Math.max(...values) : domain[0];
           showTooltip({
             tooltipData: {
               label: `Evolução ${previousLabel} → ${currentLabel}`,
               index,
               items,
               xPosition: (previousX + currentX) / 2,
+              variant: 'comparison',
+              comparisonRange: {
+                previous: previousLabel,
+                current: currentLabel,
+              },
             },
-            tooltipLeft: margin.left + (previousX + currentX) / 2,
-            tooltipTop: margin.top + yScale(highestValue),
+            tooltipLeft: margin.left + innerWidth / 2,
+            tooltipTop: margin.top + innerHeight / 2,
           });
         };
 
@@ -682,6 +750,7 @@ export function VisxLineChart({
                         role="graphics-symbol"
                         aria-label={`Ver evolução de ${currentLabel} para ${nextLabel}`}
                         className="cursor-crosshair outline-none"
+                        onPointerEnter={() => showSegmentTooltip(index)}
                         onPointerMove={() => showSegmentTooltip(index)}
                         onPointerLeave={hideTooltip}
                         onFocus={() => showSegmentTooltip(index)}
