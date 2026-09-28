@@ -937,8 +937,7 @@ export default function AssistantPage() {
                   </Button>
                 </div>
                 <p className="mt-2 px-1 text-center text-[11px] leading-relaxed text-[var(--muted)]">
-                  O Atlas pode cometer erros. Confirme informações importantes
-                  na base.
+                  O Atlas pode errar. Confira dados importantes na base.
                 </p>
               </form>
             </div>
