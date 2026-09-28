@@ -262,15 +262,22 @@ function HistoricalOverview({ history }: { history: HistoricalPoint[] }) {
             )}
           </div>
 
-          <fieldset className="mt-5 grid w-full grid-cols-2 gap-1 rounded-xl border-0 bg-[var(--surface-soft)] p-1 sm:w-fit lg:hidden">
+          <fieldset className="relative mt-5 grid w-full grid-cols-2 overflow-hidden rounded-full border border-[var(--line)] bg-[var(--surface-soft)] sm:w-fit lg:hidden">
             <legend className="sr-only">Indicador da série histórica</legend>
+            <span
+              aria-hidden="true"
+              className="pointer-events-none absolute inset-y-0 left-0 w-1/2 rounded-full bg-[var(--surface)] shadow-sm ring-1 ring-inset ring-[var(--line)] transition-transform duration-300 ease-out motion-reduce:transition-none"
+              style={{
+                transform: `translateX(${isPerformance ? 0 : 100}%)`,
+              }}
+            />
             <button
               type="button"
               aria-pressed={isPerformance}
               onClick={() => setActiveView('performance')}
-              className={`inline-flex min-h-10 items-center justify-center gap-2 rounded-lg px-4 text-xs font-semibold transition-colors sm:min-w-40 ${
+              className={`relative z-10 inline-flex min-h-9 min-w-0 items-center justify-center gap-2 rounded-full px-4 text-[11px] font-semibold transition-colors duration-300 sm:min-w-40 ${
                 isPerformance
-                  ? 'bg-[var(--surface)] text-[var(--ink)] shadow-sm'
+                  ? 'text-[var(--ink)]'
                   : 'text-[var(--muted)] hover:text-[var(--ink)]'
               }`}
             >
@@ -281,9 +288,9 @@ function HistoricalOverview({ history }: { history: HistoricalPoint[] }) {
               type="button"
               aria-pressed={!isPerformance}
               onClick={() => setActiveView('infrastructure')}
-              className={`inline-flex min-h-10 items-center justify-center gap-2 rounded-lg px-4 text-xs font-semibold transition-colors sm:min-w-40 ${
+              className={`relative z-10 inline-flex min-h-9 min-w-0 items-center justify-center gap-2 rounded-full px-4 text-[11px] font-semibold transition-colors duration-300 sm:min-w-40 ${
                 !isPerformance
-                  ? 'bg-[var(--surface)] text-[var(--ink)] shadow-sm'
+                  ? 'text-[var(--ink)]'
                   : 'text-[var(--muted)] hover:text-[var(--ink)]'
               }`}
             >
