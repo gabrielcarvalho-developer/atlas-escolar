@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from mcp import Client
+from mcp.client.sse import sse_client
 from mcp.client.stdio import StdioServerParameters
 from mcp.types import TextContent
 
@@ -29,10 +30,26 @@ class MCPToolError(RuntimeError):
 
 
 def create_mcp_client() -> Client:
-    """Cria um cliente para MCP remoto ou para o subprocesso stdio local."""
+    """Cria um cliente para MCP remoto (SSE/HTTP) ou subprocesso stdio local."""
     server_url = os.environ.get("MCP_SERVER_URL", "").strip()
     timeout = float(os.environ.get("MCP_READ_TIMEOUT_SECONDS", "30"))
     if server_url:
+        configured_transport = os.environ.get("MCP_REMOTE_TRANSPORT", "auto").strip().lower()
+        if configured_transport not in {"auto", "sse", "streamable-http"}:
+            raise MCPToolError(
+                "MCP_REMOTE_TRANSPORT deve ser 'auto', 'sse' ou 'streamable-http'."
+            )
+        use_sse = configured_transport == "sse" or (
+            configured_transport == "auto" and server_url.rstrip("/").endswith("/sse")
+        )
+        if use_sse:
+            return Client(
+                sse_client(
+                    server_url,
+                    timeout=timeout,
+                    sse_read_timeout=timeout,
+                )
+            )
         return Client(server_url, read_timeout_seconds=timeout)
 
     child_env: dict[str, str] = {}

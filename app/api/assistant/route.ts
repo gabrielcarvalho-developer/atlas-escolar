@@ -4,6 +4,8 @@ import type {
   AssistantSelection,
 } from '@/lib/assistant';
 
+export const maxDuration = 180;
+
 type AssistantRequest = {
   question?: unknown;
   schoolCode?: unknown;

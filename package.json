@@ -15,6 +15,7 @@
     "start": "wrangler dev --config dist/server/wrangler.json",
     "dev:next": "next dev",
     "dev:agent": "python -m uvicorn --app-dir python api:app --reload --port 8001",
+    "dev:mcp:sse": "node scripts/run-mcp-sse.mjs",
     "build:next": "next build",
     "lint": "oxlint app components/atlas-provider.tsx components/atlas-shell.tsx components/atlas-charts.tsx components/webmcp-tools.tsx lib",
     "check:agent": "cd python && python -m ruff check . && python -m pytest tests",

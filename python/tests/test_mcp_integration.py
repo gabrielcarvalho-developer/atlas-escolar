@@ -3,7 +3,9 @@ from __future__ import annotations
 from mcp import Client
 
 from agent import graph as agent_graph
+from agent import mcp_client
 from agent.graph import (
+    _TOKEN_CALLBACK,
     _collapse_repeated_blocks,
     _conversational_answer,
     _focused_evidence,
@@ -12,6 +14,7 @@ from agent.graph import (
     _normalize_plan_for_context,
     _openai_compatible_base_url,
     _parse_json_response,
+    _stream_reflector_text,
 )
 from agent.mcp_client import REQUIRED_TOOLS, create_mcp_client, decode_tool_result
 from agent.project_knowledge import (
@@ -19,7 +22,7 @@ from agent.project_knowledge import (
     retrieve_project_knowledge,
 )
 from agent.state import AgentState, PlanStep, ToolCall
-from api import _answer_chunks, _sse_event
+from api import _sse_event
 from mcp_server import mcp
 from tools import atlas_tools
 
@@ -31,6 +34,48 @@ async def test_mcp_server_exposes_the_required_contract() -> None:
     assert {tool.name for tool in response.tools} == REQUIRED_TOOLS
 
 
+def test_mcp_server_exposes_native_sse_routes() -> None:
+    app = mcp.sse_app(sse_path="/sse", message_path="/messages/")
+
+    routes = {
+        (route.path, tuple(sorted(getattr(route, "methods", None) or [])))
+        for route in app.routes
+    }
+    assert ("/sse", ("GET", "HEAD")) in routes
+    assert any(path == "/messages" for path, _ in routes)
+
+
+def test_remote_sse_url_uses_the_native_sse_transport(monkeypatch) -> None:
+    sentinel_transport = object()
+    captured: dict[str, object] = {}
+
+    def fake_sse_client(url: str, **kwargs):
+        captured.update(url=url, **kwargs)
+        return sentinel_transport
+
+    class FakeClient:
+        def __init__(self, server, **kwargs):
+            captured["server"] = server
+            captured["client_kwargs"] = kwargs
+
+    monkeypatch.setenv("MCP_SERVER_URL", "https://mcp.example.test/sse")
+    monkeypatch.setenv("MCP_REMOTE_TRANSPORT", "auto")
+    monkeypatch.setenv("MCP_READ_TIMEOUT_SECONDS", "42")
+    monkeypatch.setattr(mcp_client, "sse_client", fake_sse_client)
+    monkeypatch.setattr(mcp_client, "Client", FakeClient)
+
+    client = create_mcp_client()
+
+    assert isinstance(client, FakeClient)
+    assert captured == {
+        "url": "https://mcp.example.test/sse",
+        "timeout": 42.0,
+        "sse_read_timeout": 42.0,
+        "server": sentinel_transport,
+        "client_kwargs": {},
+    }
+
+
 def test_sse_event_preserves_unicode_and_protocol_boundaries() -> None:
     event = _sse_event("delta", {"text": "Análise do município"})
 
@@ -39,13 +84,66 @@ def test_sse_event_preserves_unicode_and_protocol_boundaries() -> None:
     assert event.endswith("\n\n")
 
 
-def test_answer_chunks_reconstruct_the_exact_markdown() -> None:
-    answer = "**Análise**\n\n" + "Dados escolares. " * 20
+async def test_reflector_stream_forwards_native_public_chunks() -> None:
+    class Chunk:
+        def __init__(self, content: str):
+            self.content = content
 
-    chunks = _answer_chunks(answer, size=37)
+    class FakeLlm:
+        async def astream(self, messages):
+            assert messages == ["prompt"]
+            for content in ("A escola ", "possui ", "internet."):
+                yield Chunk(content)
 
-    assert len(chunks) > 1
-    assert "".join(chunks) == answer
+    received: list[str] = []
+
+    async def on_token(text: str) -> None:
+        received.append(text)
+
+    token = _TOKEN_CALLBACK.set(on_token)
+    try:
+        answer = await _stream_reflector_text(FakeLlm(), ["prompt"])
+    finally:
+        _TOKEN_CALLBACK.reset(token)
+
+    assert answer == "A escola possui internet."
+    assert received == ["A escola ", "possui ", "internet."]
+
+
+async def test_reflector_stream_does_not_expose_replan_message() -> None:
+    class Chunk:
+        def __init__(self, content: str):
+            self.content = content
+
+    class FakeLlm:
+        async def astream(self, messages):
+            for content in ("REP", "LAN:", " falta consultar o município"):
+                yield Chunk(content)
+
+    received: list[str] = []
+
+    async def on_token(text: str) -> None:
+        received.append(text)
+
+    token = _TOKEN_CALLBACK.set(on_token)
+    try:
+        answer = await _stream_reflector_text(FakeLlm(), [])
+    finally:
+        _TOKEN_CALLBACK.reset(token)
+
+    assert answer == "REPLAN: falta consultar o município"
+    assert received == []
+
+
+async def test_conversational_answer_is_emitted_without_artificial_chunks() -> None:
+    received: list[str] = []
+
+    async def on_token(text: str) -> None:
+        received.append(text)
+
+    result = await agent_graph.run_agent("Oi!", on_token=on_token)
+
+    assert received == [result["answer"]]
 
 
 def test_short_greeting_receives_a_humanized_answer() -> None:

@@ -5,9 +5,13 @@ exclusivamente pelo protocolo MCP, por stdio local ou Streamable HTTP remoto.
 """
 from __future__ import annotations
 
+import argparse
 import logging
+import os
+from pathlib import Path
 from typing import Literal
 
+from dotenv import load_dotenv
 from mcp.server import MCPServer
 
 from tools.atlas_tools import (
@@ -40,6 +44,9 @@ logging.basicConfig(
     format="%(asctime)s [%(levelname)s] %(message)s",
 )
 logger = logging.getLogger("atlas-mcp")
+
+PYTHON_DIR = Path(__file__).resolve().parent
+load_dotenv(PYTHON_DIR / ".env.local")
 
 mcp = MCPServer(
     "atlas-escolar-mcp",
@@ -191,5 +198,31 @@ def get_data_methodology() -> dict[str, object]:
 
 
 if __name__ == "__main__":
-    logger.info("Iniciando Atlas Escolar MCP por stdio")
-    mcp.run()
+    parser = argparse.ArgumentParser(description="Servidor MCP do Atlas Escolar")
+    parser.add_argument("--transport", choices=("stdio", "sse"))
+    args = parser.parse_args()
+    transport = (args.transport or os.environ.get("MCP_TRANSPORT", "stdio")).strip().lower()
+
+    if transport == "stdio":
+        logger.info("Iniciando Atlas Escolar MCP por stdio")
+        mcp.run(transport="stdio")
+    elif transport == "sse":
+        host = os.environ.get("MCP_HOST", "127.0.0.1").strip()
+        port = int(os.environ.get("MCP_PORT", "8002"))
+        sse_path = os.environ.get("MCP_SSE_PATH", "/sse").strip()
+        message_path = os.environ.get("MCP_MESSAGE_PATH", "/messages/").strip()
+        logger.info(
+            "Iniciando Atlas Escolar MCP por SSE em http://%s:%d%s",
+            host,
+            port,
+            sse_path,
+        )
+        mcp.run(
+            transport="sse",
+            host=host,
+            port=port,
+            sse_path=sse_path,
+            message_path=message_path,
+        )
+    else:
+        raise ValueError("MCP_TRANSPORT deve ser 'stdio' ou 'sse'.")

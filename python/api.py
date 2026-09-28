@@ -63,35 +63,41 @@ def _sse_event(event: str, payload: dict[str, Any]) -> str:
     return f"event: {event}\ndata: {data}\n\n"
 
 
-def _answer_chunks(answer: str, size: int = 18) -> list[str]:
-    """Divide a resposta preservando exatamente seu conteúdo e Markdown."""
-    return [answer[index : index + size] for index in range(0, len(answer), size)]
-
-
 async def _stream_agent_response(
     agent_request: AgentRequest,
     http_request: Request,
 ) -> AsyncIterator[str]:
     yield _sse_event("status", {"message": "Analisando sua pergunta…"})
+    chunks: asyncio.Queue[str] = asyncio.Queue()
+
+    async def on_token(text: str) -> None:
+        await chunks.put(text)
+
     task = asyncio.create_task(
         run_agent(
             question=agent_request.question,
             history=agent_request.history,
             school_code=agent_request.school_code,
             selection=agent_request.selection,
+            on_token=on_token,
         )
     )
+    last_keep_alive = asyncio.get_running_loop().time()
 
     try:
-        while True:
+        while not task.done() or not chunks.empty():
             if await http_request.is_disconnected():
                 task.cancel()
                 return
             try:
-                result = await asyncio.wait_for(asyncio.shield(task), timeout=5)
-                break
+                chunk = await asyncio.wait_for(chunks.get(), timeout=0.5)
+                yield _sse_event("delta", {"text": chunk})
             except TimeoutError:
-                yield ": keep-alive\n\n"
+                now = asyncio.get_running_loop().time()
+                if not task.done() and now - last_keep_alive >= 5:
+                    yield ": keep-alive\n\n"
+                    last_keep_alive = now
+        result = await task
     except asyncio.CancelledError:
         task.cancel()
         raise
@@ -112,18 +118,12 @@ async def _stream_agent_response(
         )
         return
 
-    answer = str(result.get("answer", "")).strip()
-    if not answer:
+    if not str(result.get("answer", "")).strip():
         yield _sse_event(
             "error",
             {"message": "Não consegui concluir a resposta. Tente novamente."},
         )
         return
-
-    for chunk in _answer_chunks(answer):
-        yield _sse_event("delta", {"text": chunk})
-        # Evita que servidores intermediários agrupem toda a resposta em um único pacote.
-        await asyncio.sleep(0.01)
 
     yield _sse_event(
         "done",

@@ -27,9 +27,9 @@ Para adicionar um ano, inclua em `data/incoming/bases/` o trio Censo/ENEM com o 
 
 ## Assistente via MCP
 
-O assistente usa um único fluxo: `Next.js -> API Python/LangGraph -> MCP -> dados`. A API entrega status e resposta ao navegador por SSE (`POST /api/agent/stream`), com keep-alive durante o processamento. Não há resposta Llama direta nem fallback determinístico no Next.js. Se a API ou o MCP estiverem indisponíveis, a interface informa a indisponibilidade em vez de gerar uma resposta por outro mecanismo.
+O assistente usa um único fluxo: `Next.js -> API Python/LangGraph -> MCP -> dados`. A API entrega status e os chunks nativos do modelo ao navegador por SSE (`POST /api/agent/stream`), com keep-alive durante o processamento; não há fragmentação artificial nem atraso de digitação. Não há resposta Llama direta nem fallback determinístico no Next.js. Se a API ou o MCP estiverem indisponíveis, a interface informa a indisponibilidade em vez de gerar uma resposta por outro mecanismo.
 
-O servidor MCP expõe oito ferramentas auditáveis e é iniciado por `stdio` pela API Python. Para produção, `MCP_SERVER_URL` permite trocar o subprocesso local por um endpoint MCP Streamable HTTP sem alterar o agente.
+O servidor MCP expõe oito ferramentas auditáveis. Por padrão, a API Python o inicia por `stdio`; ele também possui transporte SSE nativo, com conexão em `GET /sse` e envio das mensagens MCP em `POST /messages/`. Para um servidor remoto, `MCP_SERVER_URL` aceita tanto o endpoint SSE quanto um endpoint Streamable HTTP sem alterar o agente.
 
 Copie `python/.env.example` para `python/.env.local`, escolha `LLM_PROVIDER` e preencha somente as credenciais do provedor escolhido. Para Cloudflare Workers AI, a URL curta da conta (`https://api.cloudflare.com/client/v4/accounts/{id}`) é normalizada automaticamente para a API OpenAI-compatible.
 
@@ -62,7 +62,9 @@ npm run dev
 
 Configure `ATLAS_AGENT_URL=http://localhost:8001` no `.env.local` da raiz. A aplicação Vinext fica em `http://localhost:3001` e a prontidão do agente pode ser verificada em `http://localhost:8001/health`. Para comparar a implementação no runtime original do Next.js, use `npm run dev:next`.
 
-Em produção, publique a API Python em um runtime próprio, configure a URL HTTPS em `ATLAS_AGENT_URL` e use o mesmo segredo forte em `ATLAS_AGENT_TOKEN` nos dois serviços. Se o MCP também for remoto, configure o endpoint Streamable HTTP completo em `MCP_SERVER_URL`.
+Para executar o MCP com SSE nativo em outro processo, rode `npm run dev:mcp:sse` (ou configure `MCP_TRANSPORT=sse`). O comando usa automaticamente o Python de `python/.venv`, tanto no Windows quanto em Linux/macOS. O endpoint padrão será `http://127.0.0.1:8002/sse`; aponte `MCP_SERVER_URL` para ele e mantenha `MCP_REMOTE_TRANSPORT=auto` (ou `sse`). Host, porta e caminhos podem ser alterados por `MCP_HOST`, `MCP_PORT`, `MCP_SSE_PATH` e `MCP_MESSAGE_PATH`.
+
+Em produção, publique a API Python em um runtime próprio, configure a URL HTTPS em `ATLAS_AGENT_URL` e use o mesmo segredo forte em `ATLAS_AGENT_TOKEN` nos dois serviços. Se o MCP também for remoto, configure em `MCP_SERVER_URL` a URL completa de `/sse` ou do endpoint Streamable HTTP.
 
 ## Verificações
 

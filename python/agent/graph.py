@@ -7,8 +7,9 @@ import logging
 import os
 import re
 import unicodedata
+from contextvars import ContextVar
 from pathlib import Path
-from typing import Any
+from typing import Any, Awaitable, Callable
 
 from dotenv import load_dotenv
 from langchain_core.messages import HumanMessage, SystemMessage
@@ -28,6 +29,11 @@ PYTHON_DIR = Path(__file__).resolve().parent.parent
 load_dotenv(PYTHON_DIR / ".env.local")
 
 logger = logging.getLogger("atlas-agent")
+
+TokenCallback = Callable[[str], Awaitable[None]]
+_TOKEN_CALLBACK: ContextVar[TokenCallback | None] = ContextVar(
+    "atlas_token_callback", default=None
+)
 
 REPLAN_PATTERN = re.compile(r"(?im)^\s*(?:#{1,6}\s*)?(?:\*\*)?REPLAN:\s*(?P<reason>[^\r\n]*)")
 INTERNAL_LANGUAGE_PATTERN = re.compile(
@@ -145,6 +151,78 @@ def _message_text(content: Any) -> str:
     return str(content).strip()
 
 
+def _message_chunk_text(content: Any) -> str:
+    """Extrai texto de um chunk sem remover espaços entre tokens."""
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        return "".join(
+            str(item.get("text", "")) for item in content if isinstance(item, dict)
+        )
+    return "" if content is None else str(content)
+
+
+async def _stream_llm_text(llm: Any, messages: list[Any]) -> str:
+    """Transmite chunks públicos do modelo e devolve a resposta reconstruída."""
+    callback = _TOKEN_CALLBACK.get()
+    if callback is None:
+        response = await llm.ainvoke(messages)
+        return _message_text(response.content)
+
+    parts: list[str] = []
+    async for chunk in llm.astream(messages):
+        text = _message_chunk_text(chunk.content)
+        if not text:
+            continue
+        parts.append(text)
+        await callback(text)
+    return "".join(parts).strip()
+
+
+async def _stream_reflector_text(llm: Any, messages: list[Any]) -> str:
+    """Transmite resposta final, retendo o marcador interno REPLAN."""
+    callback = _TOKEN_CALLBACK.get()
+    if callback is None:
+        response = await llm.ainvoke(messages)
+        return _message_text(response.content)
+
+    target = "REPLAN:"
+    parts: list[str] = []
+    pending = ""
+    is_public_answer: bool | None = None
+
+    async for chunk in llm.astream(messages):
+        text = _message_chunk_text(chunk.content)
+        if not text:
+            continue
+        parts.append(text)
+
+        if is_public_answer is True:
+            await callback(text)
+            continue
+        if is_public_answer is False:
+            continue
+
+        pending += text
+        candidate = pending.lstrip().upper()
+        if target.startswith(candidate):
+            continue
+        if candidate.startswith(target):
+            is_public_answer = False
+            continue
+
+        is_public_answer = True
+        await callback(pending)
+        pending = ""
+
+    if is_public_answer is None and pending:
+        candidate = pending.lstrip().upper()
+        if not candidate.startswith(target):
+            await callback(pending)
+
+    return "".join(parts).strip()
+
+
 def _parse_json_response(content: Any) -> dict[str, Any]:
     text = _message_text(content)
     if text.startswith("```"):
@@ -253,13 +331,14 @@ async def _project_knowledge_answer(
             f"Base institucional recuperada:\n{format_knowledge_context(chunks)}",
         ]
     )
-    response = await _get_llm().ainvoke(
+    answer = await _stream_llm_text(
+        _get_llm(),
         [
             SystemMessage(content=PROJECT_KNOWLEDGE_SYSTEM_PROMPT),
             HumanMessage(content="\n\n".join(user_parts)),
-        ]
+        ],
     )
-    answer = _collapse_repeated_blocks(_message_text(response.content))
+    answer = _collapse_repeated_blocks(answer)
     if not answer:
         raise RuntimeError("O modelo retornou uma resposta institucional vazia.")
     return answer
@@ -858,15 +937,16 @@ Iteração atual: {state.iteration}/{state.max_iterations}
 {ANSWER_FORMAT_INSTRUCTIONS}
 """
 
-    response = await llm.ainvoke(
+    content = await _stream_reflector_text(
+        llm,
         [
             SystemMessage(content=REFLECTOR_SYSTEM_PROMPT),
             HumanMessage(content=prompt),
-        ]
+        ],
     )
 
     return _interpret_reflector_output(
-        _message_text(response.content),
+        content,
         iteration=state.iteration,
         max_iterations=state.max_iterations,
         evidence=state.evidence,
@@ -978,10 +1058,21 @@ async def run_agent(
     history: list[dict[str, str]] | None = None,
     school_code: str | None = None,
     selection: dict[str, Any] | None = None,
+    on_token: TokenCallback | None = None,
 ) -> dict[str, Any]:
     """Run the agent end-to-end and return the final answer with metadata."""
+    emitted_text = False
+
+    async def emit(text: str) -> None:
+        nonlocal emitted_text
+        if not text or on_token is None:
+            return
+        emitted_text = True
+        await on_token(text)
+
     conversational_answer = _conversational_answer(question)
     if conversational_answer is not None:
+        await emit(conversational_answer)
         return {
             "answer": conversational_answer,
             "iterations": 0,
@@ -991,7 +1082,11 @@ async def run_agent(
         }
 
     try:
-        knowledge_answer = await _project_knowledge_answer(question, history)
+        token = _TOKEN_CALLBACK.set(emit if on_token is not None else None)
+        try:
+            knowledge_answer = await _project_knowledge_answer(question, history)
+        finally:
+            _TOKEN_CALLBACK.reset(token)
     except Exception as exc:
         logger.exception("Project knowledge retrieval failed")
         return {
@@ -1020,7 +1115,16 @@ async def run_agent(
     )
 
     try:
-        final_state = AgentState.model_validate(await app.ainvoke(initial_state))
+        stream_reflector = not (
+            _asks_for_missing_resources(question) or _asks_direct_resource_question(question)
+        )
+        token = _TOKEN_CALLBACK.set(
+            emit if on_token is not None and stream_reflector else None
+        )
+        try:
+            final_state = AgentState.model_validate(await app.ainvoke(initial_state))
+        finally:
+            _TOKEN_CALLBACK.reset(token)
         if final_state.error:
             raise RuntimeError(final_state.error)
         answer = _grounded_resource_answer(question, final_state.evidence)
@@ -1028,6 +1132,8 @@ async def run_agent(
             answer = final_state.final_answer.strip()
         if not answer:
             raise RuntimeError("O agente terminou sem produzir uma resposta.")
+        if not emitted_text:
+            await emit(answer)
         sources = _evidence_sources(final_state.evidence)
         return {
             "answer": answer,
