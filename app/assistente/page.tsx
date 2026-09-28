@@ -499,7 +499,8 @@ export default function AssistantPage() {
   const [statusMessage, setStatusMessage] = useState(
     'Analisando sua pergunta…',
   );
-  const bottomRef = useRef<HTMLDivElement>(null);
+  const messagesRef = useRef<HTMLDivElement>(null);
+  const shouldFollowMessagesRef = useRef(true);
   const activeRequest = useRef<AbortController | null>(null);
 
   useEffect(() => {
@@ -522,14 +523,22 @@ export default function AssistantPage() {
   }, [loading, messages, storageReady]);
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-  }, [messages, loading]);
+    const messagesElement = messagesRef.current;
+    if (!messagesElement || !shouldFollowMessagesRef.current) return;
+
+    messagesElement.scrollTo({
+      top: messagesElement.scrollHeight,
+      behavior: streamingMessageId ? 'auto' : 'smooth',
+    });
+  }, [messages, loading, streamingMessageId]);
 
   useEffect(() => () => activeRequest.current?.abort(), []);
 
   async function send(question: string) {
     const clean = question.trim();
     if (!clean || loading) return;
+
+    shouldFollowMessagesRef.current = true;
 
     const history: AssistantConversationTurn[] = messages
       .slice(-12)
@@ -713,8 +722,8 @@ export default function AssistantPage() {
 
   return (
     <AtlasShell>
-      <div className="mx-auto flex h-[calc(100dvh-142px-env(safe-area-inset-bottom))] min-h-[600px] w-full max-w-[1180px] flex-col px-3 py-4 sm:px-6 sm:py-6 lg:h-[calc(100dvh-64px)] lg:min-h-[680px] lg:px-8">
-        <section className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-[18px] border border-[var(--line)] bg-[var(--surface)] shadow-[0_20px_70px_rgb(18_47_56/6%)]">
+      <div className="flex h-[calc(100dvh-142px-env(safe-area-inset-bottom))] w-full flex-col lg:h-[calc(100dvh-64px)]">
+        <section className="flex min-h-0 flex-1 flex-col overflow-hidden bg-[var(--surface)]">
           <header className="flex shrink-0 items-center justify-between gap-3 border-b border-[var(--line)] px-4 py-3.5 sm:px-6 sm:py-4">
             <div className="flex min-w-0 items-center gap-3">
               <div className="relative grid size-10 shrink-0 place-items-center rounded-full bg-[var(--navy)] text-[var(--lime)] sm:size-11">
@@ -750,8 +759,23 @@ export default function AssistantPage() {
 
           <div className="flex min-h-0 flex-1 flex-col">
             <div
+              ref={messagesRef}
               className="soft-scroll min-h-0 flex-1 overflow-y-auto px-3 py-6 sm:px-6 sm:py-8"
               aria-live="polite"
+              onScroll={(event) => {
+                const element = event.currentTarget;
+                const distanceFromBottom =
+                  element.scrollHeight -
+                  element.scrollTop -
+                  element.clientHeight;
+                shouldFollowMessagesRef.current = distanceFromBottom <= 48;
+              }}
+              onWheel={(event) => {
+                if (event.deltaY < 0) shouldFollowMessagesRef.current = false;
+              }}
+              onTouchMove={() => {
+                shouldFollowMessagesRef.current = false;
+              }}
             >
               <div className="mx-auto flex w-full max-w-[900px] flex-col gap-6 sm:gap-7">
                 {messages.map((message) => (
@@ -878,7 +902,6 @@ export default function AssistantPage() {
                     </div>
                   </div>
                 )}
-                <div ref={bottomRef} />
               </div>
             </div>
 

@@ -414,10 +414,12 @@ export function AtlasShell({ children }: { children: React.ReactNode }) {
         </header>
 
         <div id="atlas-content">{children}</div>
-        <footer className="border-t border-[var(--line)] px-5 py-5 text-center text-[11px] text-[var(--muted)]">
-          Atlas Escolar · dados oficiais Censo/ENEM {atlas.year}
-          {atlas.saebYear !== null ? ` · SAEB ${atlas.saebYear}` : ''}
-        </footer>
+        {pathname !== '/assistente' && (
+          <footer className="border-t border-[var(--line)] px-5 py-5 text-center text-[11px] text-[var(--muted)]">
+            Atlas Escolar · dados oficiais Censo/ENEM {atlas.year}
+            {atlas.saebYear !== null ? ` · SAEB ${atlas.saebYear}` : ''}
+          </footer>
+        )}
       </div>
 
       <nav
