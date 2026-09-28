@@ -436,6 +436,14 @@ textarea,
   content: '';
 }
 
+.atlas-chat-bubble[data-role='assistant'] .atlas-rich-text > ul > li::before {
+  width: 0.32rem;
+  height: 0.32rem;
+  margin-top: calc((1.75em - 0.32rem) / 2);
+  background: color-mix(in srgb, var(--teal) 58%, var(--surface-raised));
+  box-shadow: none;
+}
+
 .atlas-rich-text ul ul {
   grid-column: 2;
   padding-left: 0.65rem;
