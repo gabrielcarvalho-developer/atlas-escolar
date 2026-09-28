@@ -724,7 +724,7 @@ export default function AssistantPage() {
     <AtlasShell>
       <div className="flex h-[calc(100dvh-142px-env(safe-area-inset-bottom))] w-full flex-col lg:h-[calc(100dvh-64px)]">
         <section className="flex min-h-0 flex-1 flex-col overflow-hidden bg-[var(--surface)]">
-          <header className="flex shrink-0 items-center justify-between gap-3 border-b border-[var(--line)] px-4 py-3.5 sm:px-6 sm:py-4">
+          <header className="flex shrink-0 items-center justify-between gap-3 border-b border-[var(--line)] px-4 py-3.5 sm:px-6 sm:py-4 lg:h-16 lg:py-0">
             <div className="flex min-w-0 items-center gap-3">
               <div className="relative grid size-10 shrink-0 place-items-center rounded-full bg-[var(--navy)] text-[var(--lime)] sm:size-11">
                 <Bot size={19} />
@@ -905,7 +905,7 @@ export default function AssistantPage() {
               </div>
             </div>
 
-            <div className="shrink-0 border-t border-[var(--line)] bg-[var(--surface)] px-3 pb-3 pt-3 sm:px-6 sm:pb-4 sm:pt-4">
+            <div className="shrink-0 border-t border-[var(--line)] bg-[var(--surface)] px-3 pb-3 pt-3 sm:px-6 sm:pb-4 sm:pt-4 lg:pb-[18px]">
               <form onSubmit={submit} className="mx-auto w-full max-w-[900px]">
                 <label htmlFor="atlas-question" className="sr-only">
                   Faça sua pergunta ao Atlas
