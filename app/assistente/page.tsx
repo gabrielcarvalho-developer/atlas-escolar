@@ -501,6 +501,7 @@ export default function AssistantPage() {
   );
   const messagesRef = useRef<HTMLDivElement>(null);
   const shouldFollowMessagesRef = useRef(true);
+  const pendingScrollFrameRef = useRef<number | undefined>(undefined);
   const activeRequest = useRef<AbortController | null>(null);
 
   useEffect(() => {
@@ -526,13 +527,36 @@ export default function AssistantPage() {
     const messagesElement = messagesRef.current;
     if (!messagesElement || !shouldFollowMessagesRef.current) return;
 
-    messagesElement.scrollTo({
-      top: messagesElement.scrollHeight,
-      behavior: streamingMessageId ? 'auto' : 'smooth',
+    pendingScrollFrameRef.current = window.requestAnimationFrame(() => {
+      pendingScrollFrameRef.current = undefined;
+      if (!shouldFollowMessagesRef.current) return;
+      messagesElement.scrollTop = messagesElement.scrollHeight;
     });
-  }, [messages, loading, streamingMessageId]);
+    return () => {
+      if (pendingScrollFrameRef.current !== undefined) {
+        window.cancelAnimationFrame(pendingScrollFrameRef.current);
+        pendingScrollFrameRef.current = undefined;
+      }
+    };
+  }, [messages]);
 
-  useEffect(() => () => activeRequest.current?.abort(), []);
+  useEffect(
+    () => () => {
+      activeRequest.current?.abort();
+      if (pendingScrollFrameRef.current !== undefined) {
+        window.cancelAnimationFrame(pendingScrollFrameRef.current);
+      }
+    },
+    [],
+  );
+
+  function stopFollowingMessages() {
+    shouldFollowMessagesRef.current = false;
+    if (pendingScrollFrameRef.current !== undefined) {
+      window.cancelAnimationFrame(pendingScrollFrameRef.current);
+      pendingScrollFrameRef.current = undefined;
+    }
+  }
 
   async function send(question: string) {
     const clean = question.trim();
@@ -760,7 +784,7 @@ export default function AssistantPage() {
           <div className="flex min-h-0 flex-1 flex-col">
             <div
               ref={messagesRef}
-              className="soft-scroll min-h-0 flex-1 overflow-y-auto px-3 py-6 sm:px-6 sm:py-8"
+              className="soft-scroll min-h-0 flex-1 overflow-y-auto px-3 py-6 [overflow-anchor:none] sm:px-6 sm:py-8"
               aria-live="polite"
               onScroll={(event) => {
                 const element = event.currentTarget;
@@ -768,14 +792,12 @@ export default function AssistantPage() {
                   element.scrollHeight -
                   element.scrollTop -
                   element.clientHeight;
-                shouldFollowMessagesRef.current = distanceFromBottom <= 48;
+                shouldFollowMessagesRef.current = distanceFromBottom <= 1;
               }}
               onWheel={(event) => {
-                if (event.deltaY < 0) shouldFollowMessagesRef.current = false;
+                if (event.deltaY < 0) stopFollowingMessages();
               }}
-              onTouchMove={() => {
-                shouldFollowMessagesRef.current = false;
-              }}
+              onTouchMove={stopFollowingMessages}
             >
               <div className="mx-auto flex w-full max-w-[900px] flex-col gap-6 sm:gap-7">
                 {messages.map((message) => (
