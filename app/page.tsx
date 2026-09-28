@@ -117,7 +117,9 @@ function MetricCard({
       </div>
       <p className="atlas-metric-value mt-5">{value}</p>
       <div className="mt-3 flex items-center justify-between gap-3">
-        <p className="text-[11px] leading-relaxed text-[var(--muted)]">{note}</p>
+        <p className="text-[11px] leading-relaxed text-[var(--muted)]">
+          {note}
+        </p>
         {children}
       </div>
     </article>
@@ -193,7 +195,9 @@ function IndicatorRow({
           <Icon size={14} className="shrink-0 text-[var(--muted)]" />
           <span className="truncate">{label}</span>
         </span>
-        <span className="font-semibold tabular-nums">{formatPercentage(value)}</span>
+        <span className="font-semibold tabular-nums">
+          {formatPercentage(value)}
+        </span>
       </div>
       <div className="h-2 overflow-hidden rounded-full bg-[var(--canvas-deep)]">
         <div
@@ -220,16 +224,10 @@ function IndicatorRow({
   );
 }
 
-function HistoricalOverview({
-  history,
-  selectedYear,
-}: {
-  history: HistoricalPoint[];
-  selectedYear: number;
-}) {
-  const [activeView, setActiveView] = useState<'performance' | 'infrastructure'>(
-    'performance',
-  );
+function HistoricalOverview({ history }: { history: HistoricalPoint[] }) {
+  const [activeView, setActiveView] = useState<
+    'performance' | 'infrastructure'
+  >('performance');
 
   if (history.length < 2) return null;
   const firstYear = history.at(0)?.year;
@@ -243,7 +241,10 @@ function HistoricalOverview({
           <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-start">
             <div className="max-w-2xl">
               <p className="atlas-eyebrow">Série histórica</p>
-              <h2 id="historical-overview-title" className="atlas-section-title">
+              <h2
+                id="historical-overview-title"
+                className="atlas-section-title"
+              >
                 Evolução dos indicadores
               </h2>
               <p className="atlas-section-copy">
@@ -261,7 +262,7 @@ function HistoricalOverview({
             )}
           </div>
 
-          <fieldset className="mt-5 grid w-full grid-cols-2 gap-1 rounded-xl border-0 bg-[var(--surface-soft)] p-1 sm:w-fit">
+          <fieldset className="mt-5 grid w-full grid-cols-2 gap-1 rounded-xl border-0 bg-[var(--surface-soft)] p-1 sm:w-fit lg:hidden">
             <legend className="sr-only">Indicador da série histórica</legend>
             <button
               type="button"
@@ -292,38 +293,34 @@ function HistoricalOverview({
           </fieldset>
         </div>
 
-        <div className="border-t border-[var(--line)] px-3 pb-3 sm:px-5 sm:pb-5">
-          {isPerformance ? (
-            <div>
-              <div className="flex items-start justify-between gap-4 px-2 pt-5">
-                <div>
-                  <h3 className="atlas-card-title">Notas do ENEM por área</h3>
-                  <p className="atlas-card-copy">
-                    A legenda mostra a variação até o ano selecionado.
-                  </p>
-                </div>
-                <span className="hidden rounded-full border border-[var(--line)] px-3 py-1.5 text-[10px] text-[var(--muted)] sm:inline-flex">
-                  Pontuação
-                </span>
+        <div className="grid border-t border-[var(--line)] px-3 pb-3 sm:px-5 sm:pb-5 lg:grid-cols-2 lg:px-0 lg:pb-0">
+          <div
+            className={`${isPerformance ? '' : 'hidden'} min-w-0 lg:block lg:px-5 lg:pb-5`}
+          >
+            <div className="flex items-start justify-between gap-4 px-2 pt-5">
+              <div>
+                <h3 className="atlas-card-title">Notas do ENEM por área</h3>
               </div>
-              <HistoricalPerformanceChart history={history} selectedYear={selectedYear} />
+              <span className="hidden rounded-full border border-[var(--line)] px-3 py-1.5 text-[10px] text-[var(--muted)] sm:inline-flex">
+                Pontuação
+              </span>
             </div>
-          ) : (
-            <div>
-              <div className="flex items-start justify-between gap-4 px-2 pt-5">
-                <div>
-                  <h3 className="atlas-card-title">Condições da rede</h3>
-                  <p className="atlas-card-copy">
-                    Percentual de escolas atendidas em cada dimensão.
-                  </p>
-                </div>
-                <span className="hidden rounded-full border border-[var(--line)] px-3 py-1.5 text-[10px] text-[var(--muted)] sm:inline-flex">
-                  % de escolas
-                </span>
+            <HistoricalPerformanceChart history={history} />
+          </div>
+
+          <div
+            className={`${isPerformance ? 'hidden' : ''} min-w-0 lg:block lg:border-l lg:border-[var(--line)] lg:px-5 lg:pb-5`}
+          >
+            <div className="flex items-start justify-between gap-4 px-2 pt-5">
+              <div>
+                <h3 className="atlas-card-title">Condições da rede</h3>
               </div>
-              <HistoricalInfrastructureChart history={history} />
+              <span className="hidden rounded-full border border-[var(--line)] px-3 py-1.5 text-[10px] text-[var(--muted)] sm:inline-flex">
+                % de escolas
+              </span>
             </div>
-          )}
+            <HistoricalInfrastructureChart history={history} />
+          </div>
         </div>
       </article>
     </section>
@@ -351,7 +348,9 @@ function TerritoryOverview({
     primary.indicators.internet - primary.indicators.studentInternet,
   );
   const deviceTotal =
-    primary.devices.desktops + primary.devices.laptops + primary.devices.tablets;
+    primary.devices.desktops +
+    primary.devices.laptops +
+    primary.devices.tablets;
   const title = secondary
     ? `${primary.name} × ${secondary.name}`
     : primary.kind === 'state'
@@ -413,12 +412,17 @@ function TerritoryOverview({
       {secondary && (
         <section className="mt-4 grid gap-3 sm:grid-cols-2">
           {[primary, secondary].map((territory, index) => (
-            <article key={territory.name} className="atlas-card flex items-center gap-4 p-4">
+            <article
+              key={territory.name}
+              className="atlas-card flex items-center gap-4 p-4"
+            >
               <span className="grid size-9 shrink-0 place-items-center rounded-full bg-[var(--teal-soft)] text-xs font-bold text-[var(--teal)]">
                 {index === 0 ? 'A' : 'B'}
               </span>
               <div className="min-w-0">
-                <p className="truncate text-sm font-semibold">{territory.name}</p>
+                <p className="truncate text-sm font-semibold">
+                  {territory.name}
+                </p>
                 <p className="mt-1 text-[11px] text-[var(--muted)]">
                   {formatNumber(territory.schoolCount)} escolas ·{' '}
                   {formatNumber(territory.enemRecords)} registros ENEM
@@ -442,7 +446,10 @@ function TerritoryOverview({
             }
           />
           <div className="mt-2 min-w-0 flex-1">
-            <TerritoryPerformanceChart primary={primary} secondary={secondary} />
+            <TerritoryPerformanceChart
+              primary={primary}
+              secondary={secondary}
+            />
           </div>
           <TerritoryLegend primary={primary} secondary={secondary} />
         </article>
@@ -461,8 +468,9 @@ function TerritoryOverview({
             <p className="mt-2 text-sm font-medium">de diferença no acesso</p>
             <p className="mt-3 text-sm leading-relaxed text-[var(--muted)] dark:text-white/65">
               {formatPercentage(primary.indicators.internet)} das escolas têm
-              internet, mas {formatPercentage(primary.indicators.studentInternet)}{' '}
-              registram acesso para os alunos.
+              internet, mas{' '}
+              {formatPercentage(primary.indicators.studentInternet)} registram
+              acesso para os alunos.
             </p>
           </div>
           <div className="relative mt-auto space-y-3 border-t border-[var(--line)] pt-5 dark:border-white/10">
@@ -471,9 +479,16 @@ function TerritoryOverview({
               ['Uso pedagógico', primary.indicators.learningInternet],
               ['Acesso dos alunos', primary.indicators.studentInternet],
             ].map(([label, value]) => (
-              <div key={String(label)} className="flex items-center justify-between text-sm">
-                <span className="text-[var(--muted)] dark:text-white/65">{label}</span>
-                <span className="font-semibold">{formatPercentage(Number(value))}</span>
+              <div
+                key={String(label)}
+                className="flex items-center justify-between text-sm"
+              >
+                <span className="text-[var(--muted)] dark:text-white/65">
+                  {label}
+                </span>
+                <span className="font-semibold">
+                  {formatPercentage(Number(value))}
+                </span>
               </div>
             ))}
           </div>
@@ -505,10 +520,12 @@ function TerritoryOverview({
           {secondary && (
             <div className="mt-5 flex flex-wrap gap-4 border-t border-[var(--line)] pt-4 text-[10px] text-[var(--muted)]">
               <span className="flex items-center gap-1.5">
-                <i className="size-2 rounded-full bg-[var(--teal)]" /> {primary.name}
+                <i className="size-2 rounded-full bg-[var(--teal)]" />{' '}
+                {primary.name}
               </span>
               <span className="flex items-center gap-1.5">
-                <i className="size-2 rounded-full bg-[var(--ink)]/55" /> {secondary.name}
+                <i className="size-2 rounded-full bg-[var(--ink)]/55" />{' '}
+                {secondary.name}
               </span>
             </div>
           )}
@@ -526,8 +543,13 @@ function TerritoryOverview({
               ['Portáteis', primary.devices.laptops],
               ['Tablets', primary.devices.tablets],
             ].map(([label, value]) => (
-              <div key={String(label)} className="rounded-xl bg-[var(--surface-soft)] p-3">
-                <p className="text-[10px] leading-tight text-[var(--muted)]">{label}</p>
+              <div
+                key={String(label)}
+                className="rounded-xl bg-[var(--surface-soft)] p-3"
+              >
+                <p className="text-[10px] leading-tight text-[var(--muted)]">
+                  {label}
+                </p>
                 <p className="mt-2 text-lg font-bold tracking-[-0.04em]">
                   {formatNumber(Number(value))}
                 </p>
@@ -536,7 +558,9 @@ function TerritoryOverview({
           </div>
           <div className="mt-5 flex items-center justify-between">
             <div>
-              <p className="text-[11px] text-[var(--muted)]">Dispositivos para alunos</p>
+              <p className="text-[11px] text-[var(--muted)]">
+                Dispositivos para alunos
+              </p>
               <p className="mt-1 text-2xl font-bold tracking-[-0.04em]">
                 {formatNumber(deviceTotal)}
               </p>
@@ -548,11 +572,15 @@ function TerritoryOverview({
           <div className="mt-auto grid gap-3 border-t border-[var(--line)] pt-4 text-xs">
             <div className="flex justify-between gap-4">
               <span className="text-[var(--muted)]">Salas climatizadas</span>
-              <strong>{formatPercentage(primary.indicators.climateRooms)}</strong>
+              <strong>
+                {formatPercentage(primary.indicators.climateRooms)}
+              </strong>
             </div>
             <div className="flex justify-between gap-4">
               <span className="text-[var(--muted)]">Salas acessíveis</span>
-              <strong>{formatPercentage(primary.indicators.accessibleRooms)}</strong>
+              <strong>
+                {formatPercentage(primary.indicators.accessibleRooms)}
+              </strong>
             </div>
           </div>
         </article>
@@ -560,9 +588,7 @@ function TerritoryOverview({
 
       <section
         className={`mt-4 grid items-stretch gap-4 ${
-          primary.kind === 'state'
-            ? 'xl:grid-cols-2'
-            : ''
+          primary.kind === 'state' ? 'xl:grid-cols-2' : ''
         }`}
       >
         <article className="atlas-card flex h-full min-w-0 flex-col p-5 sm:p-6">
@@ -590,7 +616,10 @@ function TerritoryOverview({
             <SaebStateChart year={saebYear} />
             <div className="mt-4 grid grid-cols-3 gap-2 border-t border-[var(--line)] pt-4">
               {getSaebState(saebYear).map((row) => (
-                <div key={row.ETAPA} className="rounded-xl bg-[var(--surface-soft)] p-3 text-center">
+                <div
+                  key={row.ETAPA}
+                  className="rounded-xl bg-[var(--surface-soft)] p-3 text-center"
+                >
                   <p className="truncate text-[10px] text-[var(--muted)]">
                     {row.ETAPA.startsWith('5º')
                       ? '5º ano'
@@ -603,7 +632,9 @@ function TerritoryOverview({
                       ? '—'
                       : formatPercentage(row.TAXA_PARTICIPACAO_AGREGADA)}
                   </p>
-                  <p className="mt-0.5 text-[9px] text-[var(--muted)]">participação</p>
+                  <p className="mt-0.5 text-[9px] text-[var(--muted)]">
+                    participação
+                  </p>
                 </div>
               ))}
             </div>
@@ -611,7 +642,7 @@ function TerritoryOverview({
         )}
       </section>
 
-      <HistoricalOverview history={history} selectedYear={primary.year} />
+      <HistoricalOverview history={history} />
     </div>
   );
 }
@@ -668,7 +699,8 @@ export default function OverviewPage() {
   ] as const;
   const orderedInfrastructureKeys = [...INFRA_KEYS].sort(
     (left, right) =>
-      context.school.infrastructure[right] - context.school.infrastructure[left],
+      context.school.infrastructure[right] -
+      context.school.infrastructure[left],
   );
 
   return (
@@ -679,9 +711,13 @@ export default function OverviewPage() {
             <div className="mb-3 flex flex-wrap items-center gap-2 text-[11px] font-semibold text-[var(--teal)]">
               <School size={14} /> Panorama da escola
               <span className="text-[var(--line-strong)]">·</span>
-              <span className="text-[var(--muted)]">{context.school.municipality}</span>
+              <span className="text-[var(--muted)]">
+                {context.school.municipality}
+              </span>
             </div>
-            <h1 className="atlas-page-heading max-w-4xl">{context.school.name}</h1>
+            <h1 className="atlas-page-heading max-w-4xl">
+              {context.school.name}
+            </h1>
             <div className="mt-3 flex flex-wrap gap-2 text-[10px] text-[var(--muted)]">
               <span className="rounded-full bg-[var(--surface-soft)] px-3 py-1.5">
                 {context.school.dependency}
@@ -692,7 +728,8 @@ export default function OverviewPage() {
             </div>
           </div>
           <div className="flex w-fit items-center gap-2 rounded-full border border-[var(--line)] bg-[var(--surface)] px-3 py-2 text-[11px] text-[var(--muted)]">
-            <Database size={13} className="text-[var(--teal)]" /> Dados de {context.school.year}
+            <Database size={13} className="text-[var(--teal)]" /> Dados de{' '}
+            {context.school.year}
           </div>
         </section>
 
@@ -733,7 +770,10 @@ export default function OverviewPage() {
 
         {context.lowSampleAreas.length > 0 && (
           <div className="mt-4 flex gap-3 rounded-2xl border border-[var(--line)] bg-[var(--peach)] p-4 text-sm leading-relaxed">
-            <CircleAlert className="mt-0.5 shrink-0 text-[var(--warning)]" size={18} />
+            <CircleAlert
+              className="mt-0.5 shrink-0 text-[var(--warning)]"
+              size={18}
+            />
             <p>
               <strong className="font-semibold">Leitura com cautela.</strong>{' '}
               {context.lowSampleAreas
@@ -809,7 +849,10 @@ export default function OverviewPage() {
                   <div key={key}>
                     <div className="mb-2 flex items-center justify-between gap-3 text-xs">
                       <span className="font-medium">{INFRA_LABELS[key]}</span>
-                      <span className="text-[10px] font-semibold" style={{ color: status.color }}>
+                      <span
+                        className="text-[10px] font-semibold"
+                        style={{ color: status.color }}
+                      >
                         {status.label} · {formatPercentage(value)}
                       </span>
                     </div>
@@ -826,7 +869,7 @@ export default function OverviewPage() {
           </article>
         </section>
 
-        <HistoricalOverview history={context.history} selectedYear={context.school.year} />
+        <HistoricalOverview history={context.history} />
 
         <section className="relative mt-5 overflow-hidden rounded-[20px] bg-[var(--navy)] p-6 text-white sm:p-8">
           <div className="relative flex flex-col justify-between gap-6 lg:flex-row lg:items-center">
@@ -835,7 +878,8 @@ export default function OverviewPage() {
                 Transforme a leitura em ação
               </p>
               <p className="mt-2 max-w-xl text-sm leading-relaxed text-white/55">
-                Organize os principais sinais desta escola em um plano objetivo para a equipe.
+                Organize os principais sinais desta escola em um plano objetivo
+                para a equipe.
               </p>
             </div>
             <Link

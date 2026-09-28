@@ -2,7 +2,6 @@
 
 import {
   ChartLegend,
-  type ChartLegendItem,
   ChartConfig,
   VisxBarChart,
   VisxLineChart,
@@ -13,7 +12,6 @@ import {
   INFRA_KEYS,
   INFRA_SHORT_LABELS,
   getSaebState,
-  type EnemAreaKey,
   type HistoricalPoint,
   SchoolContext,
   TerritoryMetrics,
@@ -262,69 +260,17 @@ function getPerformanceScale(values: Array<number | null>) {
   };
 }
 
-type PerformanceDeltas = Record<EnemAreaKey, number | null>;
-
-function formatPerformanceDelta(delta: number | null) {
-  if (delta === null) return '—';
-
+function formatPerformanceDelta(delta: number) {
   const roundedDelta = Math.abs(delta) < 0.05 ? 0 : delta;
   return `${roundedDelta > 0 ? '+' : ''}${roundedDelta.toLocaleString('pt-BR', {
     maximumFractionDigits: 1,
   })} pts`;
 }
 
-function HistoricalPerformanceLegend({
-  items,
-  deltas,
-  comparisonYears,
-}: {
-  items: ChartLegendItem[];
-  deltas: PerformanceDeltas;
-  comparisonYears?: { previous: number; current: number };
-}) {
-  return (
-    <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-2 pt-3 text-[10px]">
-      {comparisonYears && (
-        <span className="w-full text-center font-medium text-[var(--muted)]">
-          Variação {comparisonYears.previous} → {comparisonYears.current}
-        </span>
-      )}
-      {items.map((item) => {
-        const key = item.key as EnemAreaKey;
-        const delta = deltas[key];
-
-        return (
-          <div key={key} className="flex items-center gap-1.5">
-            <span
-              aria-hidden="true"
-              className="size-2 shrink-0 rounded-[2px]"
-              style={{ backgroundColor: item.color }}
-            />
-            <span>{ENEM_AREA_SHORT_LABELS[key]}</span>
-            <span
-              className={`font-semibold tabular-nums ${
-                delta === null || delta === 0
-                  ? 'text-[var(--muted)]'
-                  : delta > 0
-                    ? 'text-[var(--positive)]'
-                    : 'text-[var(--danger)]'
-              }`}
-            >
-              {formatPerformanceDelta(delta)}
-            </span>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
 export function HistoricalPerformanceChart({
   history,
-  selectedYear,
 }: {
   history: HistoricalPoint[];
-  selectedYear: number;
 }) {
   const data = history.map((point) => ({
     year: String(point.year),
@@ -337,25 +283,6 @@ export function HistoricalPerformanceChart({
       ENEM_AREA_KEYS.map((key) => point.averages[key]),
     ),
   );
-  const currentIndex = history.findIndex(
-    (point) => point.year === selectedYear,
-  );
-  const current = currentIndex >= 0 ? history[currentIndex] : undefined;
-  const previous = currentIndex > 0 ? history[currentIndex - 1] : undefined;
-  const deltas = Object.fromEntries(
-    ENEM_AREA_KEYS.map((key) => {
-      const currentValue = current?.averages[key];
-      const previousValue = previous?.averages[key];
-
-      return [
-        key,
-        currentValue == null || previousValue == null
-          ? null
-          : currentValue - previousValue,
-      ];
-    }),
-  ) as PerformanceDeltas;
-
   return (
     <VisxLineChart
       config={historicalPerformanceConfig}
@@ -365,18 +292,14 @@ export function HistoricalPerformanceChart({
       domain={performanceScale.domain}
       ticks={performanceScale.ticks}
       accessibleLabel="Evolução histórica das notas do ENEM por área"
-      className="h-[290px] w-full sm:h-[330px]"
+      className="h-[320px] w-full sm:h-[330px] lg:h-[320px] xl:h-[330px]"
       initialDimension={{ width: 720, height: 330 }}
-      legendHeight={58}
+      legendHeight={(width) => (width < 520 ? 92 : 58)}
+      segmentDeltaFormat={formatPerformanceDelta}
       legend={(items) => (
-        <HistoricalPerformanceLegend
+        <ChartLegend
           items={items}
-          deltas={deltas}
-          comparisonYears={
-            current && previous
-              ? { previous: previous.year, current: current.year }
-              : undefined
-          }
+          className="flex-wrap gap-x-5 gap-y-4 pt-5 text-[10px]"
         />
       )}
     />
@@ -419,13 +342,13 @@ export function HistoricalInfrastructureChart({
       ticks={[0, 25, 50, 75, 100]}
       tickFormat={(value) => `${value}%`}
       accessibleLabel="Evolução histórica da infraestrutura escolar"
-      className="h-[290px] w-full sm:h-[330px]"
+      className="h-[320px] w-full sm:h-[330px] lg:h-[320px] xl:h-[330px]"
       initialDimension={{ width: 720, height: 330 }}
-      legendHeight={42}
+      legendHeight={(width) => (width < 520 ? 92 : 58)}
       legend={(items) => (
         <ChartLegend
           items={items}
-          className="flex-wrap gap-x-3 gap-y-1 text-[10px]"
+          className="flex-wrap gap-x-5 gap-y-4 pt-5 text-[10px]"
         />
       )}
     />

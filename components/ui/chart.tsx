@@ -48,8 +48,9 @@ type ChartMargin = {
 
 type ChartTooltipDatum = {
   label: string;
-  items: Array<ChartLegendItem & { value: number }>;
+  items: Array<ChartLegendItem & { value: number; formattedValue?: string }>;
   index: number;
+  xPosition?: number;
 };
 
 type SharedChartProps = {
@@ -92,8 +93,12 @@ function getLabel(datum: ChartDatum, key: string) {
   return value == null ? '' : String(value);
 }
 
-function formatCategoryTick(value: string, width: number) {
-  return width < 520 && value.length > 8 ? `${value.slice(0, 7)}…` : value;
+function formatCategoryTick(value: string, availableWidth: number) {
+  const maxCharacters = Math.max(5, Math.floor((availableWidth - 8) / 5.5));
+
+  return value.length > maxCharacters
+    ? `${value.slice(0, maxCharacters - 1).trimEnd()}…`
+    : value;
 }
 
 function getTooltipData(
@@ -119,7 +124,7 @@ function getAriaLabel(data: ChartTooltipDatum) {
         typeof item.label === 'string' || typeof item.label === 'number'
           ? String(item.label)
           : item.key;
-      return `${label}: ${item.value.toLocaleString('pt-BR')}`;
+      return `${label}: ${item.formattedValue ?? item.value.toLocaleString('pt-BR')}`;
     })
     .join(', ');
   return `${data.label}. ${values}`;
@@ -158,7 +163,7 @@ function TooltipContent({
               {item.label}
             </span>
             <span className="text-foreground font-mono font-medium whitespace-nowrap tabular-nums">
-              {item.value.toLocaleString('pt-BR')}
+              {item.formattedValue ?? item.value.toLocaleString('pt-BR')}
             </span>
           </div>
         ))}
@@ -437,12 +442,12 @@ export function VisxBarChart({
                   hideAxisLine
                   hideTicks
                   tickFormat={(value) =>
-                    formatCategoryTick(String(value), innerWidth)
+                    formatCategoryTick(String(value), xScale.step())
                   }
-                  tickLabelProps={(_, index) => ({
+                  tickLabelProps={() => ({
                     ...axisTickLabelProps,
                     fontSize: innerWidth < 400 ? 9 : 11,
-                    textAnchor: index === labels.length - 1 ? 'end' : 'middle',
+                    textAnchor: 'middle',
                     dy: 9,
                   })}
                 />
@@ -491,9 +496,11 @@ export function VisxLineChart({
   accessibleLabel,
   legend,
   legendHeight = 42,
+  segmentDeltaFormat,
 }: SharedChartProps & {
   legend?: (items: ChartLegendItem[]) => React.ReactNode;
-  legendHeight?: number;
+  legendHeight?: number | ((width: number) => number);
+  segmentDeltaFormat?: (value: number) => string;
 }) {
   const margin = mergeMargin(marginOverride);
   const seriesItems = getSeriesItems(config, series);
@@ -509,7 +516,14 @@ export function VisxLineChart({
   return (
     <ChartFrame className={className} initialDimension={initialDimension}>
       {({ width, height }) => {
-        const svgHeight = Math.max(0, height - (legend ? legendHeight : 0));
+        const resolvedLegendHeight =
+          typeof legendHeight === 'function'
+            ? legendHeight(width)
+            : legendHeight;
+        const svgHeight = Math.max(
+          0,
+          height - (legend ? resolvedLegendHeight : 0),
+        );
         const innerWidth = Math.max(0, width - margin.left - margin.right);
         const innerHeight = Math.max(0, svgHeight - margin.top - margin.bottom);
         const labels = data.map((datum) => getLabel(datum, xKey));
@@ -540,6 +554,48 @@ export function VisxLineChart({
           });
         };
 
+        const showSegmentTooltip = (index: number) => {
+          const previousDatum = data[index];
+          const currentDatum = data[index + 1];
+          if (!previousDatum || !currentDatum || !segmentDeltaFormat) return;
+
+          const previousLabel = getLabel(previousDatum, xKey);
+          const currentLabel = getLabel(currentDatum, xKey);
+          const previousX = xScale(previousLabel) ?? 0;
+          const currentX = xScale(currentLabel) ?? 0;
+          const values = series.flatMap(({ key }) => {
+            const previousValue = getNumericValue(previousDatum, key);
+            const currentValue = getNumericValue(currentDatum, key);
+            return previousValue === undefined || currentValue === undefined
+              ? []
+              : [previousValue, currentValue];
+          });
+          const items = seriesItems.flatMap((item) => {
+            const previousValue = getNumericValue(previousDatum, item.key);
+            const currentValue = getNumericValue(currentDatum, item.key);
+            if (previousValue === undefined || currentValue === undefined)
+              return [];
+
+            const value = currentValue - previousValue;
+            return [
+              { ...item, value, formattedValue: segmentDeltaFormat(value) },
+            ];
+          });
+          if (!items.length) return;
+
+          const highestValue = values.length ? Math.max(...values) : domain[0];
+          showTooltip({
+            tooltipData: {
+              label: `Evolução ${previousLabel} → ${currentLabel}`,
+              index,
+              items,
+              xPosition: (previousX + currentX) / 2,
+            },
+            tooltipLeft: margin.left + (previousX + currentX) / 2,
+            tooltipTop: margin.top + yScale(highestValue),
+          });
+        };
+
         return (
           <>
             <svg
@@ -558,8 +614,14 @@ export function VisxLineChart({
                 {tooltipOpen && tooltipData && (
                   <line
                     aria-hidden="true"
-                    x1={xScale(labels[tooltipData.index]) ?? 0}
-                    x2={xScale(labels[tooltipData.index]) ?? 0}
+                    x1={
+                      tooltipData.xPosition ??
+                      (xScale(labels[tooltipData.index]) || 0)
+                    }
+                    x2={
+                      tooltipData.xPosition ??
+                      (xScale(labels[tooltipData.index]) || 0)
+                    }
                     y1={0}
                     y2={innerHeight}
                     stroke="var(--chart-grid)"
@@ -585,7 +647,9 @@ export function VisxLineChart({
                       const value = getNumericValue(datum, key);
                       if (value === undefined) return null;
                       const isActive =
-                        tooltipOpen && tooltipData?.index === index;
+                        tooltipOpen &&
+                        tooltipData?.xPosition === undefined &&
+                        tooltipData?.index === index;
 
                       return (
                         <circle
@@ -599,10 +663,36 @@ export function VisxLineChart({
                     })}
                   </React.Fragment>
                 ))}
+                {segmentDeltaFormat &&
+                  data.slice(0, -1).map((datum, index) => {
+                    const currentLabel = getLabel(datum, xKey);
+                    const nextLabel = getLabel(data[index + 1], xKey);
+                    const currentX = xScale(currentLabel) ?? 0;
+                    const nextX = xScale(nextLabel) ?? 0;
+                    const inset = Math.min(12, (nextX - currentX) / 4);
+
+                    return (
+                      <rect
+                        key={`segment-${currentLabel}-${nextLabel}`}
+                        x={currentX + inset}
+                        width={Math.max(0, nextX - currentX - inset * 2)}
+                        height={innerHeight}
+                        fill="transparent"
+                        tabIndex={0}
+                        role="graphics-symbol"
+                        aria-label={`Ver evolução de ${currentLabel} para ${nextLabel}`}
+                        className="cursor-crosshair outline-none"
+                        onPointerMove={() => showSegmentTooltip(index)}
+                        onPointerLeave={hideTooltip}
+                        onFocus={() => showSegmentTooltip(index)}
+                        onBlur={hideTooltip}
+                      />
+                    );
+                  })}
                 {data.map((datum, index) => {
                   const label = getLabel(datum, xKey);
                   const center = xScale(label) ?? 0;
-                  const hitWidth = Math.max(step, 24);
+                  const hitWidth = segmentDeltaFormat ? 24 : Math.max(step, 24);
                   const tooltipDatum = getTooltipData(
                     datum,
                     index,
@@ -657,7 +747,7 @@ export function VisxLineChart({
             {legend && (
               <div
                 className="absolute inset-x-0 bottom-0"
-                style={{ height: legendHeight }}
+                style={{ height: resolvedLegendHeight }}
               >
                 {legend(seriesItems)}
               </div>
