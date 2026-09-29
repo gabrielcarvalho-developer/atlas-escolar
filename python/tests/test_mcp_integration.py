@@ -9,6 +9,7 @@ from agent.graph import (
     _collapse_repeated_blocks,
     _conversational_answer,
     _focused_evidence,
+    _get_llm,
     _grounded_resource_answer,
     _interpret_reflector_output,
     _normalize_plan_for_context,
@@ -326,6 +327,19 @@ def test_cloudflare_account_url_is_normalized() -> None:
     base = "https://api.cloudflare.com/client/v4/accounts/account-id"
     assert _openai_compatible_base_url(base) == f"{base}/ai/v1"
     assert _openai_compatible_base_url(f"{base}/ai/v1/chat/completions") == f"{base}/ai/v1"
+
+
+def test_llama_provider_uses_non_streaming_completion_for_compatible_gateways(
+    monkeypatch,
+) -> None:
+    monkeypatch.setenv("LLM_PROVIDER", "llama")
+    monkeypatch.setenv("LLAMA_MODEL", "test-model")
+    monkeypatch.setenv("LLAMA_API_KEY", "test-key")
+    monkeypatch.setenv("LLAMA_API_URL", "https://gateway.example.test/v1")
+
+    llm = _get_llm()
+
+    assert llm.disable_streaming is True
 
 
 def test_model_json_parser_ignores_trailing_explanation() -> None:

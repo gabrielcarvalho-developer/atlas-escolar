@@ -27,7 +27,7 @@ Para adicionar um ano, inclua em `data/incoming/bases/` o trio Censo/ENEM com o 
 
 ## Assistente via MCP
 
-O assistente usa um único fluxo: `Next.js -> API Python/LangGraph -> MCP -> dados`. A API entrega status e os chunks nativos do modelo ao navegador por SSE (`POST /api/agent/stream`), com keep-alive durante o processamento; não há fragmentação artificial nem atraso de digitação. Não há resposta Llama direta nem fallback determinístico no Next.js. Se a API ou o MCP estiverem indisponíveis, a interface informa a indisponibilidade em vez de gerar uma resposta por outro mecanismo.
+O assistente usa um único fluxo: `Next.js -> API Python/LangGraph -> MCP -> dados`. A API entrega status e a resposta ao navegador por SSE (`POST /api/agent/stream`), com keep-alive durante o processamento. Provedores com streaming OpenAI compatível enviam os chunks nativos; gateways Llama que podem devolver deltas fora do padrão usam a conclusão completa para evitar respostas interrompidas. Não há resposta Llama direta nem fallback determinístico no Next.js. Se a API ou o MCP estiverem indisponíveis, a interface informa a indisponibilidade em vez de gerar uma resposta por outro mecanismo.
 
 O servidor MCP expõe oito ferramentas auditáveis. Por padrão, a API Python o inicia por `stdio`; ele também possui transporte SSE nativo, com conexão em `GET /sse` e envio das mensagens MCP em `POST /messages/`. Para um servidor remoto, `MCP_SERVER_URL` aceita tanto o endpoint SSE quanto um endpoint Streamable HTTP sem alterar o agente.
 

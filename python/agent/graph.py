@@ -128,6 +128,12 @@ def _get_llm() -> Any:
             temperature=0,
             max_tokens=1200,
             max_retries=1,
+            # Some OpenAI-compatible Llama gateways encode numeric-only deltas
+            # as JSON numbers (for example, `content: 445`). LangChain rejects
+            # those malformed streaming chunks after part of the answer has
+            # already reached the browser. Use the regular completion endpoint;
+            # the API still delivers the completed answer through SSE.
+            disable_streaming=True,
         )
     if provider == "openai":
         from langchain_openai import ChatOpenAI
