@@ -30,6 +30,7 @@ import {
   type AssistantVisualizationTarget,
 } from '@/lib/assistant';
 import {
+  AVAILABLE_YEARS,
   buildMunicipalityMetrics,
   buildSchoolContext,
   buildStateMetrics,
@@ -50,8 +51,30 @@ type StoredConversation = {
   updatedAt: string;
 };
 
+function mentionedYears(text: string) {
+  return [
+    ...new Set(
+      Array.from(text.matchAll(/\b(?:19|20)\d{2}\b/g), (match) =>
+        Number(match[0]),
+      ),
+    ),
+  ];
+}
+
+function messageVisualizationYear(message: ChatMessage, fallback: number) {
+  if (message.visualization?.year) return message.visualization.year;
+  const supportedYears = mentionedYears(message.text).filter((year) =>
+    AVAILABLE_YEARS.includes(year),
+  );
+  return supportedYears.length === 1 ? supportedYears[0] : fallback;
+}
+
 const STORAGE_KEY = 'atlas-assistant-conversation-v2';
 const MAX_STORED_MESSAGES = 80;
+const VISUALIZATION_ONLY_COPY = {
+  text: 'Aqui est\u00e1 o gr\u00e1fico que voc\u00ea pediu.',
+  mode: 'Visualiza\u00e7\u00e3o dos dados',
+};
 
 function buildSuggestions(context: SchoolContext) {
   return [
@@ -131,11 +154,36 @@ function sourceFromAnswer(text: string) {
   return text.match(SOURCE_FOOTER_PATTERN)?.[1]?.replace(/\*\*$/, '').trim();
 }
 
+function collapseRepeatedAnswerBlocks(text: string) {
+  const blocks = text.trim().split(/\n\s*\n/);
+  if (blocks.length > 1 && blocks[0].trim().endsWith('?')) {
+    blocks.shift();
+  }
+  const seen = new Set<string>();
+  const kept: string[] = [];
+
+  for (const block of blocks) {
+    const normalized = block.replace(/\s+/g, ' ').trim().toLocaleLowerCase('pt-BR');
+    const canSignalLoop =
+      normalized.length >= 60 || /^\s*[-*]\s/.test(block);
+    if (canSignalLoop && seen.has(normalized)) break;
+    seen.add(normalized);
+    kept.push(block.trim());
+  }
+  return kept.join('\n\n');
+}
+
 function answerWithoutSource(text: string) {
-  return text
-    .replace(SOURCE_FOOTER_PATTERN, '')
-    .replace(SOURCE_LABEL_PATTERN, '')
-    .trimEnd();
+  return collapseRepeatedAnswerBlocks(
+    text
+      .replace(SOURCE_FOOTER_PATTERN, '')
+      .replace(SOURCE_LABEL_PATTERN, '')
+      .replace(
+        /\s*\((?:CN|CH|LC|MT|Essay|escola|munic[^)]*|estado)\)/gi,
+        '',
+      )
+      .trimEnd(),
+  );
 }
 
 function RichText({
@@ -357,6 +405,7 @@ function visualizationForQuestion(
     comparisonMunicipality: string;
     compareMunicipalities: boolean;
     schoolCode: string;
+    year: number;
   },
 ): AssistantVisualization | undefined {
   const normalized = question
@@ -402,21 +451,50 @@ function visualizationForQuestion(
     (explicitlyRequested ? visualizationType(normalizedContext) : undefined);
   if (!type) return undefined;
 
+  // The question takes precedence over the UI filter. A follow-up asking for
+  // a chart inherits the year from the recent conversation context.
+  const currentYears = mentionedYears(question);
+  const contextYears = explicitlyRequested
+    ? mentionedYears(previousContext)
+    : [];
+  const requestedYears = currentYears.length ? currentYears : contextYears;
+  if (
+    requestedYears.length > 1 ||
+    (requestedYears.length === 1 &&
+      !AVAILABLE_YEARS.includes(requestedYears[0]))
+  ) {
+    // Current charts represent one year. Avoid presenting the selected year
+    // as though it answered a different or multi-year request.
+    return undefined;
+  }
+  const year = requestedYears[0] ?? selection.year;
+
   if (selection.analysisLevel === 'school') {
+    if (!getSchools(year).some((school) => school.code === selection.schoolCode)) {
+      return undefined;
+    }
     return {
       type,
+      year,
       primary: { kind: 'school', schoolCode: selection.schoolCode },
     };
   }
   if (selection.analysisLevel === 'municipality') {
+    const availableMunicipalities = new Set(
+      getMunicipalities(year).map((municipality) => municipality.name),
+    );
+    if (!availableMunicipalities.has(selection.municipality)) return undefined;
     return {
       type,
+      year,
       primary: {
         kind: 'municipality',
         municipality: selection.municipality,
       },
       secondary:
-        selection.compareMunicipalities && selection.comparisonMunicipality
+        selection.compareMunicipalities &&
+        selection.comparisonMunicipality &&
+        availableMunicipalities.has(selection.comparisonMunicipality)
           ? {
               kind: 'municipality',
               municipality: selection.comparisonMunicipality,
@@ -424,7 +502,18 @@ function visualizationForQuestion(
           : undefined,
     };
   }
-  return { type, primary: { kind: 'state' } };
+  return { type, year, primary: { kind: 'state' } };
+}
+
+function isVisualizationOnlyRequest(question: string) {
+  const normalized = question
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase();
+  if (!/\b(?:graficos?|visualiz\w*|chart)\b/.test(normalized)) return false;
+  return !/\b(?:analis\w*|explic\w*|interpret\w*|coment\w*|resum\w*|conclu\w*|recomend\w*|diagnostic\w*|diga|informe|saber|qual|quais|quanto|por que|porque)\b/.test(
+    normalized,
+  );
 }
 
 function ThinkingIndicator({ status }: { status: string }) {
@@ -573,6 +662,39 @@ export default function AssistantPage() {
       text: clean,
       mode: 'pergunta',
     };
+    const visualization = visualizationForQuestion(
+      clean,
+      history
+        .slice(-2)
+        .map((turn) => turn.text)
+        .join(' '),
+      {
+        analysisLevel: atlas.analysisLevel,
+        municipality: atlas.municipality,
+        comparisonMunicipality: atlas.comparisonMunicipality,
+        compareMunicipalities: atlas.compareMunicipalities,
+        schoolCode: context.school.code,
+        year: atlas.year,
+      },
+    );
+
+    if (visualization && isVisualizationOnlyRequest(clean)) {
+      const assistantMessage: ChatMessage = {
+        id: crypto.randomUUID(),
+        role: 'assistant',
+        ...VISUALIZATION_ONLY_COPY,
+        engine: 'system',
+        visualization,
+      };
+      setMessages((current) => [
+        ...current,
+        userMessage,
+        assistantMessage,
+      ]);
+      setDraft('');
+      return;
+    }
+
     setMessages((current) => [...current, userMessage]);
     setDraft('');
     setLoading(true);
@@ -618,25 +740,13 @@ export default function AssistantPage() {
         }
         if (event.type === 'done') {
           completed = true;
-          const visualization = visualizationForQuestion(
-            clean,
-            history
-              .slice(-2)
-              .map((turn) => turn.text)
-              .join(' '),
-            {
-              analysisLevel: atlas.analysisLevel,
-              municipality: atlas.municipality,
-              comparisonMunicipality: atlas.comparisonMunicipality,
-              compareMunicipalities: atlas.compareMunicipalities,
-              schoolCode: context.school.code,
-            },
-          );
+          if (event.text) receivedText = event.text;
           setMessages((current) =>
             current.map((message) =>
               message.id === assistantId
                 ? {
                     ...message,
+                    text: event.text ?? message.text,
                     source: event.source,
                     mode: event.mode ?? 'Consulta aos dados do Atlas',
                     engine: event.engine,
@@ -849,11 +959,14 @@ export default function AssistantPage() {
                               {message.visualization.type === 'infrastructure'
                                 ? 'Indicadores de infraestrutura'
                                 : 'Desempenho por área'}
+                              <span className="ml-auto tabular-nums">
+                                Ano {messageVisualizationYear(message, atlas.year)}
+                              </span>
                             </figcaption>
                             <div className="atlas-answer-chart-scroll soft-scroll">
                               <MessageVisualization
                                 visualization={message.visualization}
-                                year={atlas.year}
+                                year={messageVisualizationYear(message, atlas.year)}
                               />
                             </div>
                           </figure>

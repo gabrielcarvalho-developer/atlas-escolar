@@ -586,6 +586,7 @@ def get_data_methodology() -> dict[str, Any]:
             "saeb": _available_saeb_years(),
         },
         "limitations": [
+            "A entrega n\u00e3o cont\u00e9m ano ou data de funda\u00e7\u00e3o das escolas.",
             "QTD_REGISTROS representa candidatos/registros, não a soma de presenças por área.",
             "Médias do ENEM devem ser acompanhadas da contagem de participantes da área.",
             "Amostras abaixo de 30 participantes exigem cautela.",

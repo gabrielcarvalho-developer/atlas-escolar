@@ -10,12 +10,19 @@ from agent.graph import (
     _conversational_answer,
     _focused_evidence,
     _get_llm,
+    _grounded_enem_answer,
+    _grounded_enem_comparison_answer,
+    _grounded_enem_record_answer,
+    _grounded_infrastructure_dimension_answer,
     _grounded_resource_answer,
+    _grounded_temporal_answer,
     _interpret_reflector_output,
+    _known_unavailable_answer,
     _normalize_plan_for_context,
     _openai_compatible_base_url,
     _parse_json_response,
     _stream_reflector_text,
+    _strip_redundant_question_heading,
 )
 from agent.mcp_client import REQUIRED_TOOLS, create_mcp_client, decode_tool_result
 from agent.project_knowledge import (
@@ -136,6 +143,77 @@ async def test_reflector_stream_does_not_expose_replan_message() -> None:
     assert received == []
 
 
+async def test_reflector_stream_does_not_emit_redundant_question_heading() -> None:
+    class Chunk:
+        def __init__(self, content: str):
+            self.content = content
+
+    class FakeLlm:
+        async def astream(self, messages):
+            for content in (
+                "Media do ENEM no ano de 2024",
+                "\n\n",
+                "A media de Linguagens foi de 489,89 pontos.",
+            ):
+                yield Chunk(content)
+
+    received: list[str] = []
+
+    async def on_token(text: str) -> None:
+        received.append(text)
+
+    token = _TOKEN_CALLBACK.set(on_token)
+    try:
+        answer = await _stream_reflector_text(
+            FakeLlm(),
+            [],
+            question="Qual foi a media do ENEM no ano de 2024?",
+        )
+    finally:
+        _TOKEN_CALLBACK.reset(token)
+
+    assert answer.startswith("Media do ENEM no ano de 2024")
+    assert received == ["A media de Linguagens foi de 489,89 pontos."]
+
+
+async def test_reflector_stream_stops_before_repeated_paragraph_loop() -> None:
+    class Chunk:
+        def __init__(self, content: str):
+            self.content = content
+
+    repeated = "A media de Letras foi de 489,89 pontos e a redacao foi de 651,4 pontos."
+
+    class FakeLlm:
+        async def astream(self, messages):
+            for content in (
+                "A resposta direta vem primeiro.\n\n",
+                f"{repeated}\n\n",
+                "A escola participou com 132 registros.\n\n",
+                f"{repeated}\n\n",
+                "Este trecho nao deve ser exibido.",
+            ):
+                yield Chunk(content)
+
+    received: list[str] = []
+
+    async def on_token(text: str) -> None:
+        received.append(text)
+
+    token = _TOKEN_CALLBACK.set(on_token)
+    try:
+        await _stream_reflector_text(
+            FakeLlm(),
+            [],
+            question="Quais foram as medias do ENEM em 2024?",
+        )
+    finally:
+        _TOKEN_CALLBACK.reset(token)
+
+    streamed = "".join(received)
+    assert streamed.count(repeated) == 1
+    assert "Este trecho nao deve ser exibido" not in streamed
+
+
 async def test_conversational_answer_is_emitted_without_artificial_chunks() -> None:
     received: list[str] = []
 
@@ -154,6 +232,40 @@ def test_short_greeting_receives_a_humanized_answer() -> None:
     assert answer.startswith("Olá!")
     assert "indicadores" in answer
     assert "evidências" not in answer
+
+
+def test_school_foundation_is_reported_as_unavailable() -> None:
+    answer = _known_unavailable_answer("Quando ela foi fundada?")
+
+    assert answer is not None
+    assert "n\u00e3o informa o ano de funda\u00e7\u00e3o" in answer
+    assert "refer\u00eancia do Censo Escolar e do ENEM" in answer
+    assert "2025" not in answer
+
+
+def test_project_creation_question_is_not_treated_as_school_foundation() -> None:
+    assert _known_unavailable_answer("Quando o projeto Atlas foi criado?") is None
+
+
+async def test_foundation_question_bypasses_the_analytical_agent(monkeypatch) -> None:
+    monkeypatch.setattr(agent_graph, "retrieve_project_knowledge", lambda *args: [])
+
+    def fail_if_graph_runs():
+        raise AssertionError("The analytical graph must not run for a known schema gap.")
+
+    monkeypatch.setattr(agent_graph, "build_agent_graph", fail_if_graph_runs)
+
+    result = await agent_graph.run_agent("Quando essa escola foi fundada?")
+
+    assert result["engine"] == "atlas-schema"
+    assert result["iterations"] == 0
+    assert "n\u00e3o informa" in result["answer"]
+
+
+def test_methodology_declares_that_school_foundation_is_absent() -> None:
+    result = atlas_tools.get_data_methodology()
+
+    assert any("funda\u00e7\u00e3o" in limitation for limitation in result["limitations"])
 
 
 def test_greeting_with_a_data_question_is_not_intercepted() -> None:
@@ -386,7 +498,8 @@ def test_enem_question_hides_unrequested_infrastructure_evidence() -> None:
     assert result["averages"] == {"mt": 500}
     assert "infrastructure" not in result
     assert "resources" not in result
-    assert "infrastructure" not in result["history"][0]
+    assert "history" not in result
+    assert "comparisonWithPrevious" not in result
 
 
 def test_infrastructure_question_hides_unrequested_enem_evidence() -> None:
@@ -561,6 +674,337 @@ def test_repeated_answer_blocks_are_truncated_before_the_loop() -> None:
 
     assert cleaned.count("* Quadra de esportes") == 1
     assert "Além disso" not in cleaned
+
+
+def test_redundant_question_heading_is_removed() -> None:
+    answer = (
+        "Qual foi a media do ENEM no ano de 2024?\n\n"
+        "A media de Linguagens foi de 489,89 pontos."
+    )
+
+    cleaned = _strip_redundant_question_heading(
+        "Qual foi a media do ENEM no ano de 2024?", answer
+    )
+
+    assert cleaned == "A media de Linguagens foi de 489,89 pontos."
+
+
+def test_temporal_answer_groups_changes_without_static_resources() -> None:
+    evidence = [
+        {
+            "step_id": 1,
+            "results": [
+                {
+                    "tool": "get_school_profile",
+                    "result": {
+                        "resources": {"library": True, "scienceLab": True},
+                        "comparisonWithPrevious": {
+                            "fromYear": 2024,
+                            "toYear": 2025,
+                            "enem": {
+                                "cn": {"change": 8.15, "direction": "improved"},
+                                "ch": {"change": 10.7, "direction": "improved"},
+                                "lc": {"change": 10.51, "direction": "improved"},
+                                "mt": {"change": -14.43, "direction": "worsened"},
+                                "essay": {"change": -62.53, "direction": "worsened"},
+                            },
+                            "infrastructure": {
+                                "basicServices": {"change": 0, "direction": "stable"},
+                                "learningSpaces": {"change": 0, "direction": "stable"},
+                                "connectivity": {"change": 0, "direction": "stable"},
+                                "accessibility": {
+                                    "change": 20,
+                                    "direction": "improved",
+                                },
+                                "climate": {"change": 0, "direction": "stable"},
+                            },
+                        },
+                    },
+                }
+            ],
+        }
+    ]
+
+    answer = _grounded_temporal_answer(
+        "A escola evoluiu entre os anos de 2024 e 2025?", evidence
+    )
+
+    assert answer is not None
+    assert answer.startswith("Parcialmente. Entre 2024 e 2025")
+    assert "### Melhoras" in answer
+    assert "### Quedas" in answer
+    assert answer.count("\n- ") <= 5
+    assert "biblioteca" not in answer
+    assert answer.count("2024") == 1
+    assert answer.count("2025") == 1
+    assert "Acessibilidade" in answer
+    assert "Letras" not in answer
+
+
+def test_enem_summary_uses_canonical_areas_and_one_year_reference() -> None:
+    evidence = [
+        {
+            "step_id": 1,
+            "results": [
+                {
+                    "tool": "get_school_profile",
+                    "result": {
+                        "name": "Escola Exemplo",
+                        "year": 2024,
+                        "averages": {
+                            "cn": 445.24,
+                            "ch": 469.64,
+                            "lc": 489.89,
+                            "mt": 467.27,
+                            "essay": 651.4,
+                            "validEssay": 703.75,
+                        },
+                    },
+                }
+            ],
+        }
+    ]
+
+    answer = _grounded_enem_answer(
+        "Qual foi a media do ENEM no ano de 2024?", evidence
+    )
+
+    assert answer is not None
+    assert answer.count("2024") == 1
+    assert "uma \u00fanica m\u00e9dia geral" in answer
+    assert "**Ci\u00eancias da Natureza:** **445,24 pontos**" in answer
+    assert "**Linguagens e C\u00f3digos:** **489,89 pontos**" in answer
+    assert "Letras" not in answer
+    assert "validEssay" not in answer
+
+
+def test_enem_record_count_returns_only_the_requested_fact() -> None:
+    evidence = [
+        {
+            "results": [
+                {
+                    "tool": "get_school_profile",
+                    "result": {
+                        "name": "Escola Exemplo",
+                        "year": 2025,
+                        "records": 128,
+                        "averages": {"cn": 453.39},
+                        "comparisonWithPrevious": {
+                            "fromYear": 2024,
+                            "toYear": 2025,
+                        },
+                    },
+                }
+            ]
+        }
+    ]
+
+    answer = _grounded_enem_record_answer(
+        "Quantos registros do ENEM existem para essa escola?", evidence
+    )
+
+    assert answer == "A escola tem **128 registros do ENEM** em 2025."
+    assert "m\u00e9dia" not in answer
+    assert "melhora" not in answer
+    focused = _focused_evidence(
+        "Quantos registros do ENEM existem para essa escola?", evidence
+    )
+    focused_result = focused[0]["results"][0]["result"]
+    assert focused_result["records"] == 128
+    assert "averages" not in focused_result
+    assert "comparisonWithPrevious" not in focused_result
+
+
+def test_specific_infrastructure_dimension_excludes_other_resources() -> None:
+    evidence = [
+        {
+            "results": [
+                {
+                    "tool": "get_school_profile",
+                    "result": {
+                        "name": "Escola Exemplo",
+                        "year": 2025,
+                        "infrastructure": {
+                            "basicServices": 7.5,
+                            "learningSpaces": 10,
+                            "connectivity": 10,
+                            "accessibility": 10,
+                            "climate": 10,
+                        },
+                        "infrastructureScore": 9.5,
+                        "criticalFactor": "basicServices",
+                        "resources": {
+                            "water": True,
+                            "publicEnergy": True,
+                            "publicSewage": False,
+                            "wasteCollection": True,
+                            "library": True,
+                            "scienceLab": True,
+                            "internet": True,
+                            "accessibleRooms": 0,
+                        },
+                        "averages": {"cn": 453.39},
+                    },
+                }
+            ]
+        }
+    ]
+
+    question = "Como estao os servicos basicos?"
+    answer = _grounded_infrastructure_dimension_answer(question, evidence)
+
+    assert answer is not None
+    assert answer.startswith("Os servi\u00e7os b\u00e1sicos da escola atingem **75%** em 2025.")
+    assert "rede p\u00fablica de esgoto" in answer
+    assert "biblioteca" not in answer
+    assert "internet" not in answer
+    assert "acessibilidade" not in answer
+
+    focused = _focused_evidence(question, evidence)
+    focused_result = focused[0]["results"][0]["result"]
+    assert focused_result["infrastructure"] == {"basicServices": 7.5}
+    assert set(focused_result["resources"]) == {
+        "water",
+        "publicEnergy",
+        "publicSewage",
+        "wasteCollection",
+    }
+    assert "averages" not in focused_result
+    assert "infrastructureScore" not in focused_result
+
+
+def test_enem_comparison_is_short_and_has_no_parenthetical_labels() -> None:
+    evidence = [
+        {
+            "results": [
+                {
+                    "tool": "get_school_profile",
+                    "result": {
+                        "year": 2025,
+                        "averages": {
+                            "cn": 453.39,
+                            "ch": 480.34,
+                            "lc": 500.4,
+                            "mt": 452.84,
+                            "essay": 588.87,
+                        },
+                    },
+                },
+                {
+                    "tool": "get_municipality_metrics",
+                    "result": {
+                        "name": "Coelho Neto",
+                        "year": 2025,
+                        "averages": {
+                            "cn": 453.82,
+                            "ch": 469.75,
+                            "lc": 482.27,
+                            "mt": 452.71,
+                            "essay": 526.72,
+                        },
+                    },
+                },
+            ]
+        }
+    ]
+
+    answer = _grounded_enem_comparison_answer(
+        "Compare as medias do ENEM da escola com o municipio.", evidence
+    )
+
+    assert answer is not None
+    assert answer.startswith(
+        "Em 2025, a escola ficou acima da m\u00e9dia de **Coelho Neto** em 4 das 5 \u00e1reas."
+    )
+    assert answer.count("\n- ") == 5
+    assert "(" not in answer
+    assert "**Reda\u00e7\u00e3o:** +62,15 pontos" in answer
+    assert "**Ci\u00eancias da Natureza:** \u22120,43 pontos" in answer
+
+
+def test_enem_specific_area_answer_is_a_single_direct_sentence() -> None:
+    evidence = [
+        {
+            "results": [
+                {
+                    "tool": "get_state_metrics",
+                    "result": {
+                        "name": "Maranhao",
+                        "year": 2025,
+                        "averages": {"mt": 472.5},
+                    },
+                }
+            ]
+        }
+    ]
+
+    answer = _grounded_enem_answer(
+        "Qual foi a media de matematica no ENEM?", evidence
+    )
+
+    assert answer == (
+        "Em 2025, a m\u00e9dia de **Matem\u00e1tica** do Maranh\u00e3o foi de "
+        "**472,5 pontos**."
+    )
+
+
+def test_meaningful_answer_opening_is_preserved() -> None:
+    answer = "A media foi de 489,89 pontos.\n\nO resultado se refere a Linguagens."
+
+    cleaned = _strip_redundant_question_heading(
+        "Qual foi a media do ENEM no ano de 2024?", answer
+    )
+
+    assert cleaned == answer
+
+
+def test_explicit_year_overrides_selected_year_in_plan() -> None:
+    state = AgentState(
+        question="Qual foi a media do ENEM em 2024?",
+        selection={"year": 2025},
+    )
+    steps = [
+        PlanStep(
+            id=1,
+            description="Consultar medias",
+            tool_calls=[
+                ToolCall(
+                    tool_name="get_state_metrics",
+                    arguments={"year": 2025},
+                    step_id=1,
+                )
+            ],
+        )
+    ]
+
+    normalized = _normalize_plan_for_context(steps, state)
+
+    assert normalized[0].tool_calls[0].arguments["year"] == 2024
+
+
+def test_temporal_comparison_queries_the_latest_mentioned_year() -> None:
+    state = AgentState(
+        question="A escola evoluiu entre 2024 e 2025?",
+        school_code="21288780",
+        selection={"year": 2024},
+    )
+    steps = [
+        PlanStep(
+            id=1,
+            description="Comparar anos",
+            tool_calls=[
+                ToolCall(
+                    tool_name="get_school_profile",
+                    arguments={"school_code": "21288780", "year": 2024},
+                    step_id=1,
+                )
+            ],
+        )
+    ]
+
+    normalized = _normalize_plan_for_context(steps, state)
+
+    assert normalized[0].tool_calls[0].arguments["year"] == 2025
 
 
 def test_missing_resources_answer_uses_boolean_and_count_semantics() -> None:

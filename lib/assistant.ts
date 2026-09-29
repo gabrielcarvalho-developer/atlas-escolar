@@ -21,6 +21,8 @@ export type AssistantVisualizationTarget =
 
 export type AssistantVisualization = {
   type: 'infrastructure' | 'performance';
+  /** Year requested in the conversation, independent of the current UI filter. */
+  year?: number;
   primary: AssistantVisualizationTarget;
   secondary?: AssistantVisualizationTarget;
 };
@@ -40,6 +42,7 @@ export type AssistantStreamEvent =
   | { type: 'delta'; text: string }
   | {
       type: 'done';
+      text?: string;
       source?: string;
       mode?: string;
       engine?: string;
@@ -81,6 +84,7 @@ function parseStreamEvent(block: string): AssistantStreamEvent | undefined {
   if (eventName === 'done') {
     return {
       type: 'done',
+      text: typeof data.text === 'string' ? data.text : undefined,
       source: typeof data.source === 'string' ? data.source : undefined,
       mode: typeof data.mode === 'string' ? data.mode : undefined,
       engine: typeof data.engine === 'string' ? data.engine : undefined,

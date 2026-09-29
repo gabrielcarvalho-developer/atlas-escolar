@@ -128,6 +128,7 @@ async def _stream_agent_response(
     yield _sse_event(
         "done",
         {
+            "text": result["answer"],
             "source": result.get("source", "Atlas Escolar"),
             "mode": result.get("mode", "Consulta aos dados do Atlas"),
             "engine": result.get("engine", "mcp-langgraph"),

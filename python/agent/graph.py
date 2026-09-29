@@ -86,6 +86,40 @@ RESOURCE_KEY_PATTERN = re.compile(
     r"\s*\((?:" + "|".join([*RESOURCE_BOOLEAN_LABELS, *RESOURCE_COUNT_LABELS]) + r")\)",
     re.IGNORECASE,
 )
+PRESENTATION_NOISE_PATTERN = re.compile(
+    r"\s*\((?:CN|CH|LC|MT|Essay|escola|munic[iÃ­]pio|estado)\)",
+    re.IGNORECASE,
+)
+PRESENTATION_NOISE_PATTERN = re.compile(
+    r"\s*\((?:CN|CH|LC|MT|Essay|escola|munic[^)]*|estado)\)",
+    re.IGNORECASE,
+)
+ENEM_CHANGE_LABELS = {
+    "cn": "CiÃªncias da Natureza",
+    "ch": "CiÃªncias Humanas",
+    "lc": "Linguagens e CÃ³digos",
+    "mt": "MatemÃ¡tica",
+    "essay": "RedaÃ§Ã£o",
+}
+INFRA_CHANGE_LABELS = {
+    "basicServices": "ServiÃ§os bÃ¡sicos",
+    "learningSpaces": "EspaÃ§os escolares",
+    "connectivity": "Conectividade",
+    "accessibility": "Acessibilidade",
+    "climate": "Salas climatizadas",
+}
+ENEM_CHANGE_LABELS.update({
+    "cn": "Ci\u00eancias da Natureza",
+    "ch": "Ci\u00eancias Humanas",
+    "lc": "Linguagens e C\u00f3digos",
+    "mt": "Matem\u00e1tica",
+    "essay": "Reda\u00e7\u00e3o",
+})
+INFRA_CHANGE_LABELS.update({
+    "basicServices": "Servi\u00e7os b\u00e1sicos",
+    "learningSpaces": "Espa\u00e7os escolares",
+    "accessibility": "Acessibilidade",
+})
 
 
 def _required_env(name: str) -> str:
@@ -185,7 +219,9 @@ async def _stream_llm_text(llm: Any, messages: list[Any]) -> str:
     return "".join(parts).strip()
 
 
-async def _stream_reflector_text(llm: Any, messages: list[Any]) -> str:
+async def _stream_reflector_text(
+    llm: Any, messages: list[Any], question: str = ""
+) -> str:
     """Transmite resposta final, retendo o marcador interno REPLAN."""
     callback = _TOKEN_CALLBACK.get()
     if callback is None:
@@ -196,6 +232,60 @@ async def _stream_reflector_text(llm: Any, messages: list[Any]) -> str:
     parts: list[str] = []
     pending = ""
     is_public_answer: bool | None = None
+    public_buffer = ""
+    seen_blocks: set[str] = set()
+    emitted_blocks = 0
+    first_block = True
+    stream_stopped = False
+
+    async def emit_block(block: str) -> None:
+        nonlocal emitted_blocks, stream_stopped
+        cleaned = PRESENTATION_NOISE_PATTERN.sub("", block).strip()
+        if not cleaned or stream_stopped:
+            return
+        normalized = re.sub(r"\s+", " ", cleaned).strip().casefold()
+        can_signal_loop = len(normalized) >= 60 or cleaned.startswith(("- ", "* "))
+        if can_signal_loop and normalized in seen_blocks:
+            stream_stopped = True
+            logger.warning("Repeated streamed answer block detected; stopping public deltas.")
+            return
+        seen_blocks.add(normalized)
+        prefix = "\n\n" if emitted_blocks else ""
+        emitted_blocks += 1
+        await callback(prefix + cleaned)
+
+    async def emit_public(text: str, *, final: bool = False) -> None:
+        nonlocal public_buffer, first_block, stream_stopped
+        if stream_stopped:
+            return
+        if not question:
+            if text:
+                await callback(text)
+            return
+
+        public_buffer += text
+        while True:
+            separator = re.search(r"\r?\n\s*\r?\n", public_buffer)
+            if separator is None:
+                break
+            block = public_buffer[: separator.start()]
+            public_buffer = public_buffer[separator.end() :]
+            if first_block and _is_redundant_question_heading(question, block):
+                first_block = False
+                continue
+            first_block = False
+            await emit_block(block)
+            if stream_stopped:
+                public_buffer = ""
+                return
+
+        if final and public_buffer:
+            block = public_buffer
+            public_buffer = ""
+            if first_block and _is_redundant_question_heading(question, block):
+                return
+            first_block = False
+            await emit_block(block)
 
     async for chunk in llm.astream(messages):
         text = _message_chunk_text(chunk.content)
@@ -204,7 +294,9 @@ async def _stream_reflector_text(llm: Any, messages: list[Any]) -> str:
         parts.append(text)
 
         if is_public_answer is True:
-            await callback(text)
+            await emit_public(text)
+            if stream_stopped:
+                break
             continue
         if is_public_answer is False:
             continue
@@ -218,13 +310,18 @@ async def _stream_reflector_text(llm: Any, messages: list[Any]) -> str:
             continue
 
         is_public_answer = True
-        await callback(pending)
+        await emit_public(pending)
         pending = ""
+        if stream_stopped:
+            break
 
     if is_public_answer is None and pending:
         candidate = pending.lstrip().upper()
         if not candidate.startswith(target):
-            await callback(pending)
+            await emit_public(pending)
+
+    if is_public_answer is not False:
+        await emit_public("", final=True)
 
     return "".join(parts).strip()
 
@@ -308,6 +405,33 @@ def _conversational_answer(question: str) -> str | None:
             "Posso analisar o desempenho no ENEM, infraestrutura e recursos da escola, além "
             "de fazer comparações com o município. Experimente perguntar: “Quais são os "
             "principais pontos de atenção desta escola?”"
+        )
+    return None
+
+
+def _known_unavailable_answer(question: str) -> str | None:
+    """Answer schema-known gaps without inferring from unrelated fields."""
+    folded = _fold_text(question)
+    if "atlas" in folded or "projeto" in folded:
+        return None
+    asks_foundation = any(
+        term in folded
+        for term in (
+            "fundada",
+            "fundado",
+            "fundacao",
+            "inaugurada",
+            "inaugurado",
+            "criada",
+            "criado",
+            "ano de criacao",
+            "inicio de funcionamento",
+        )
+    )
+    if asks_foundation:
+        return (
+            "A base do Atlas n\u00e3o informa o ano de funda\u00e7\u00e3o da escola. "
+            "Os anos exibidos indicam apenas a refer\u00eancia do Censo Escolar e do ENEM."
         )
     return None
 
@@ -430,6 +554,70 @@ def _collapse_repeated_blocks(answer: str) -> str:
     return "\n\n".join(kept).strip()
 
 
+def _is_redundant_question_heading(question: str, opening: str) -> bool:
+    """Return whether a short opening only rephrases the question."""
+    opening = opening.strip()
+    if (
+        "\n" in opening
+        or len(opening) > 120
+        or opening.endswith((".", "!", ":"))
+    ):
+        return False
+    if opening.startswith(("- ", "* ", "+ ")):
+        return False
+
+    plain_opening = re.sub(r"^(?:#{1,3}\s+)", "", opening)
+    plain_opening = re.sub(r"^\*\*(.+)\*\*$", r"\1", plain_opening).strip()
+    stop_words = {
+        "a",
+        "ao",
+        "as",
+        "com",
+        "da",
+        "das",
+        "de",
+        "desta",
+        "deste",
+        "do",
+        "dos",
+        "e",
+        "em",
+        "entre",
+        "foi",
+        "no",
+        "o",
+        "os",
+        "para",
+        "qual",
+        "que",
+        "um",
+        "uma",
+    }
+
+    def meaningful_words(text: str) -> set[str]:
+        return {
+            word
+            for word in re.findall(r"[a-z0-9]+", _fold_text(text))
+            if word not in stop_words
+        }
+
+    heading_words = meaningful_words(plain_opening)
+    question_words = meaningful_words(question)
+    return len(heading_words) >= 2 and heading_words <= question_words
+
+
+def _strip_redundant_question_heading(question: str, answer: str) -> str:
+    """Remove a short opening block that only rephrases the question."""
+    blocks = re.split(r"\n\s*\n", answer.strip())
+    if len(blocks) < 2:
+        return answer.strip()
+
+    if _is_redundant_question_heading(question, blocks[0]):
+        logger.info("Redundant question heading removed from final answer.")
+        return "\n\n".join(blocks[1:]).strip()
+    return answer.strip()
+
+
 def _grounded_resource_answer(question: str, evidence: list[dict[str, Any]]) -> str | None:
     """Formata perguntas sobre recursos diretamente da evidência escolar do MCP."""
     asks_for_missing = _asks_for_missing_resources(question)
@@ -510,6 +698,494 @@ def _grounded_resource_answer(question: str, evidence: list[dict[str, Any]]) -> 
     return "\n\n".join(sections)
 
 
+def _requested_infrastructure_dimensions(question: str) -> list[str]:
+    folded = _fold_text(question)
+    aliases = {
+        "basicServices": ("servicos basicos",),
+        "learningSpaces": ("espacos escolares", "espacos de aprendizagem"),
+        "connectivity": ("conectividade",),
+        "accessibility": ("acessibilidade",),
+        "climate": ("climatizacao", "salas climatizadas"),
+    }
+    return [key for key, terms in aliases.items() if any(term in folded for term in terms)]
+
+
+def _grounded_infrastructure_dimension_answer(
+    question: str, evidence: list[dict[str, Any]]
+) -> str | None:
+    """Answer only the infrastructure dimension explicitly requested."""
+    requested = _requested_infrastructure_dimensions(question)
+    if len(requested) != 1:
+        return None
+    key = requested[0]
+
+    tool_name = ""
+    result: dict[str, Any] | None = None
+    for step in reversed(evidence):
+        for item in reversed(step.get("results", [])):
+            candidate = item.get("result")
+            if isinstance(candidate, dict) and isinstance(
+                candidate.get("infrastructure"), dict
+            ):
+                tool_name = str(item.get("tool", ""))
+                result = candidate
+                break
+        if result is not None:
+            break
+    if result is None:
+        return None
+
+    score = result["infrastructure"].get(key)
+    year = result.get("year")
+    if not isinstance(score, (int, float)) or not isinstance(year, int):
+        return None
+
+    subjects = {
+        "basicServices": "Os servi\u00e7os b\u00e1sicos",
+        "learningSpaces": "Os espa\u00e7os escolares",
+        "connectivity": "A conectividade",
+        "accessibility": "A acessibilidade",
+        "climate": "A climatiza\u00e7\u00e3o das salas",
+    }
+    verb = "atingem" if key in {"basicServices", "learningSpaces"} else "atinge"
+    if tool_name == "get_school_profile":
+        scope = "da escola"
+    elif tool_name == "get_municipality_metrics":
+        name = str(result.get("name", "")).strip()
+        scope = f"das escolas de **{name}**" if name else "das escolas do munic\u00edpio"
+    else:
+        scope = "das escolas do Maranh\u00e3o"
+    percentage = _format_change_value(float(score) * 10)
+    answer = f"{subjects[key]} {scope} {verb} **{percentage}%** em {year}."
+
+    if key == "basicServices" and tool_name == "get_school_profile":
+        resources = result.get("resources")
+        if isinstance(resources, dict):
+            labels = {
+                "water": "\u00e1gua pot\u00e1vel",
+                "publicEnergy": "energia da rede p\u00fablica",
+                "publicSewage": "liga\u00e7\u00e3o \u00e0 rede p\u00fablica de esgoto",
+                "wasteCollection": "coleta de lixo",
+            }
+            present = [label for resource, label in labels.items() if resources.get(resource) is True]
+            missing = [label for resource, label in labels.items() if resources.get(resource) is False]
+            details = []
+            if present:
+                details.append("H\u00e1 registro de " + ", ".join(present))
+            if missing:
+                details.append("n\u00e3o h\u00e1 registro de " + ", ".join(missing))
+            if details:
+                answer += " " + "; ".join(details).capitalize() + "."
+    return answer
+
+
+def _asks_temporal_comparison(question: str) -> bool:
+    """Identify questions about change across years."""
+    folded = _fold_text(question)
+    years = re.findall(r"\b(?:19|20)\d{2}\b", question)
+    return len(set(years)) >= 2 or any(
+        term in folded
+        for term in (
+            "evolu",
+            "melhorou",
+            "piorou",
+            "mudou",
+            "mudanca",
+            "avanco",
+            "recuo",
+            "ano anterior",
+            "entre os anos",
+        )
+    )
+
+
+def _format_change_value(value: float) -> str:
+    text = f"{abs(value):.2f}".rstrip("0").rstrip(".")
+    return text.replace(".", ",")
+
+
+def _grounded_temporal_answer(
+    question: str, evidence: list[dict[str, Any]]
+) -> str | None:
+    """Build a concise, grouped year-over-year answer from structured evidence."""
+    if not _asks_temporal_comparison(question):
+        return None
+
+    result: dict[str, Any] | None = None
+    for step in reversed(evidence):
+        for item in reversed(step.get("results", [])):
+            candidate = item.get("result")
+            if isinstance(candidate, dict) and isinstance(
+                candidate.get("comparisonWithPrevious"), dict
+            ):
+                result = candidate
+                break
+        if result is not None:
+            break
+    if result is None:
+        return None
+
+    comparison = result["comparisonWithPrevious"]
+    from_year = comparison.get("fromYear")
+    to_year = comparison.get("toYear")
+    if not isinstance(from_year, int) or not isinstance(to_year, int):
+        return None
+
+    folded = _fold_text(question)
+    aliases = {
+        "cn": ("ciencias da natureza", "ciencias naturais", "natureza"),
+        "ch": ("ciencias humanas", "humanas"),
+        "lc": ("linguagens", "lingua portuguesa", "letras"),
+        "mt": ("matematica",),
+        "essay": ("redacao",),
+        "basicServices": ("servicos basicos",),
+        "learningSpaces": ("espacos escolares", "espacos de aprendizagem"),
+        "connectivity": ("conectividade",),
+        "accessibility": ("acessibilidade",),
+        "climate": ("climatizacao", "salas climatizadas"),
+    }
+    requested_keys = {
+        key for key, terms in aliases.items() if any(term in folded for term in terms)
+    }
+    asks_enem = any(
+        term in folded for term in ("enem", "nota", "media", "desempenho")
+    )
+    asks_infrastructure = any(
+        term in folded for term in ("infraestrutura", "estrutura", "recurso")
+    )
+
+    records: list[tuple[str, str, float, str]] = []
+    groups = (
+        (comparison.get("enem"), ENEM_CHANGE_LABELS, "pontos"),
+        (
+            comparison.get("infrastructure"),
+            INFRA_CHANGE_LABELS,
+            "pontos percentuais",
+        ),
+    )
+    for values, labels, unit in groups:
+        if not isinstance(values, dict):
+            continue
+        if requested_keys:
+            allowed = requested_keys
+        elif asks_enem and not asks_infrastructure:
+            allowed = set(ENEM_CHANGE_LABELS)
+        elif asks_infrastructure and not asks_enem:
+            allowed = set(INFRA_CHANGE_LABELS)
+        else:
+            allowed = set(labels)
+        for key, label in labels.items():
+            if key not in allowed:
+                continue
+            change = values.get(key)
+            if not isinstance(change, dict):
+                continue
+            value = change.get("change")
+            direction = change.get("direction")
+            if not isinstance(value, (int, float)) or direction not in {
+                "improved",
+                "worsened",
+                "stable",
+            }:
+                continue
+            records.append((label, unit, float(value), direction))
+
+    if not records:
+        return None
+
+    improved = [record for record in records if record[3] == "improved"]
+    worsened = [record for record in records if record[3] == "worsened"]
+    stable = [record for record in records if record[3] == "stable"]
+
+    asks_judgement = any(term in folded for term in ("evolu", "melhor", "pior"))
+    if improved and worsened:
+        opening = "Parcialmente." if asks_judgement else "O resultado foi misto."
+    elif improved:
+        opening = "Sim." if asks_judgement else "Houve melhora."
+    elif worsened:
+        opening = "N\u00e3o." if asks_judgement else "Houve queda."
+    else:
+        opening = "N\u00e3o houve mudan\u00e7a."
+
+    count_specs: list[tuple[int, str, str]] = []
+    if improved:
+        count_specs.append((len(improved), "melhorou", "melhoraram"))
+    if worsened:
+        count_specs.append((len(worsened), "recuou", "recuaram"))
+    if stable:
+        count_specs.append(
+            (len(stable), "permaneceu est\u00e1vel", "permaneceram est\u00e1veis")
+        )
+    counts = []
+    for index, (count, singular, plural) in enumerate(count_specs):
+        noun = " indicador" if count == 1 else " indicadores"
+        counts.append(f"{count}{noun if index == 0 else ''} {singular if count == 1 else plural}")
+    if len(counts) > 1:
+        count_summary = ", ".join(counts[:-1]) + f" e {counts[-1]}"
+    else:
+        count_summary = counts[0]
+    summary = (
+        f"{opening} Entre {from_year} e {to_year}, "
+        f"{count_summary}."
+    )
+
+    sections = [summary]
+
+    def change_section(title: str, items: list[tuple[str, str, float, str]]) -> None:
+        if not items:
+            return
+        bullets = []
+        for label, unit, value, _ in items:
+            sign = "+" if value > 0 else "\u2212"
+            bullets.append(
+                f"- **{label}:** {sign}{_format_change_value(value)} {unit}"
+            )
+        sections.append(f"### {title}\n\n" + "\n".join(bullets))
+
+    most_relevant = sorted(
+        [*improved, *worsened], key=lambda item: abs(item[2]), reverse=True
+    )[:5]
+    change_section(
+        "Melhoras", [item for item in most_relevant if item[3] == "improved"]
+    )
+    change_section(
+        "Quedas", [item for item in most_relevant if item[3] == "worsened"]
+    )
+    if stable and not most_relevant:
+        stable_labels = ", ".join(record[0] for record in stable)
+        sections.append(f"### Sem mudan\u00e7a\n\n{stable_labels}.")
+
+    return "\n\n".join(sections)
+
+
+def _asks_enem_record_count(question: str) -> bool:
+    """Identify a direct request for the number of ENEM records."""
+    folded = _fold_text(question)
+    return (
+        "enem" in folded
+        and "registro" in folded
+        and any(term in folded for term in ("quantos", "quantidade", "numero", "total"))
+    )
+
+
+def _grounded_enem_record_answer(
+    question: str, evidence: list[dict[str, Any]]
+) -> str | None:
+    """Return only the requested ENEM record count."""
+    if not _asks_enem_record_count(question):
+        return None
+
+    candidates: list[tuple[str, dict[str, Any], int]] = []
+    for step in evidence:
+        for item in step.get("results", []):
+            result = item.get("result")
+            if not isinstance(result, dict):
+                continue
+            tool_name = str(item.get("tool", ""))
+            field = "records" if tool_name == "get_school_profile" else "enemRecords"
+            value = result.get(field)
+            if isinstance(value, int) and not isinstance(value, bool):
+                candidates.append((tool_name, result, value))
+    if len(candidates) != 1:
+        return None
+
+    tool_name, result, count = candidates[0]
+    year = result.get("year")
+    if not isinstance(year, int):
+        return None
+    if tool_name == "get_school_profile":
+        subject = "A escola"
+    elif tool_name == "get_municipality_metrics":
+        name = str(result.get("name", "")).strip()
+        subject = f"O munic\u00edpio de **{name}**" if name else "O munic\u00edpio"
+    else:
+        subject = "O Maranh\u00e3o"
+    formatted_count = f"{count:,}".replace(",", ".")
+    return f"{subject} tem **{formatted_count} registros do ENEM** em {year}."
+
+
+def _asks_enem_comparison(question: str) -> bool:
+    """Identify a direct comparison of ENEM scores across scopes."""
+    folded = _fold_text(question)
+    return (
+        any(term in folded for term in ("compar", "versus", "diferenca"))
+        and any(term in folded for term in ("enem", "media", "nota", "desempenho"))
+        and not _asks_temporal_comparison(question)
+    )
+
+
+def _grounded_enem_comparison_answer(
+    question: str, evidence: list[dict[str, Any]]
+) -> str | None:
+    """Summarize a school-to-territory ENEM comparison using only deltas."""
+    if not _asks_enem_comparison(question):
+        return None
+
+    school: dict[str, Any] | None = None
+    territory: dict[str, Any] | None = None
+    territory_tool = ""
+    for step in evidence:
+        for item in step.get("results", []):
+            result = item.get("result")
+            if not isinstance(result, dict) or not isinstance(result.get("averages"), dict):
+                continue
+            tool_name = str(item.get("tool", ""))
+            if tool_name == "get_school_profile":
+                school = result
+            elif tool_name in {"get_municipality_metrics", "get_state_metrics"}:
+                territory = result
+                territory_tool = tool_name
+    if school is None or territory is None:
+        return None
+
+    school_year = school.get("year")
+    territory_year = territory.get("year")
+    if not isinstance(school_year, int) or school_year != territory_year:
+        return None
+
+    differences: list[tuple[str, float]] = []
+    for key, label in ENEM_CHANGE_LABELS.items():
+        school_value = school["averages"].get(key)
+        territory_value = territory["averages"].get(key)
+        if not isinstance(school_value, (int, float)) or not isinstance(
+            territory_value, (int, float)
+        ):
+            continue
+        differences.append((label, round(float(school_value) - float(territory_value), 2)))
+    if not differences:
+        return None
+
+    territory_name = str(territory.get("name", "Maranh\u00e3o")).strip()
+    reference = (
+        f"m\u00e9dia de **{territory_name}**"
+        if territory_tool == "get_municipality_metrics"
+        else "m\u00e9dia do **Maranh\u00e3o**"
+    )
+    above = sum(delta > 0 for _, delta in differences)
+    below = sum(delta < 0 for _, delta in differences)
+    total = len(differences)
+    if above == total:
+        summary = f"acima da {reference} em todas as {total} \u00e1reas"
+    elif below == total:
+        summary = f"abaixo da {reference} nas {total} \u00e1reas"
+    elif above:
+        summary = f"acima da {reference} em {above} das {total} \u00e1reas"
+    elif below:
+        summary = f"abaixo da {reference} em {below} das {total} \u00e1reas"
+    else:
+        summary = f"no mesmo n\u00edvel da {reference} nas {total} \u00e1reas"
+
+    bullets = []
+    for label, delta in sorted(differences, key=lambda item: abs(item[1]), reverse=True):
+        sign = "+" if delta > 0 else "\u2212" if delta < 0 else ""
+        unit = "ponto" if abs(delta) == 1 else "pontos"
+        bullets.append(f"- **{label}:** {sign}{_format_change_value(delta)} {unit}")
+    return f"Em {school_year}, a escola ficou {summary}.\n\n" + "\n".join(bullets)
+
+
+def _asks_enem_summary(question: str) -> bool:
+    """Identify a non-comparative request for ENEM scores."""
+    folded = _fold_text(question)
+    has_subject = any(
+        term in folded
+        for term in (
+            "enem",
+            "ciencias da natureza",
+            "ciencias humanas",
+            "linguagens",
+            "matematica",
+            "redacao",
+        )
+    )
+    has_measure = any(term in folded for term in ("media", "nota", "desempenho"))
+    has_comparison = any(term in folded for term in ("compar", "versus", "diferenca"))
+    return (
+        has_subject
+        and has_measure
+        and not has_comparison
+        and not _asks_temporal_comparison(question)
+    )
+
+
+def _grounded_enem_answer(
+    question: str, evidence: list[dict[str, Any]]
+) -> str | None:
+    """Format a direct ENEM answer with canonical area names."""
+    if not _asks_enem_summary(question):
+        return None
+
+    candidates: list[tuple[str, dict[str, Any]]] = []
+    for step in evidence:
+        for item in step.get("results", []):
+            result = item.get("result")
+            if isinstance(result, dict) and isinstance(result.get("averages"), dict):
+                candidates.append((str(item.get("tool", "")), result))
+    if len(candidates) != 1:
+        return None
+
+    tool_name, result = candidates[0]
+    year = result.get("year")
+    averages = result["averages"]
+    if not isinstance(year, int):
+        return None
+
+    folded = _fold_text(question)
+    area_aliases = {
+        "cn": ("ciencias da natureza", "ciencias naturais", "natureza"),
+        "ch": ("ciencias humanas", "humanas"),
+        "lc": ("linguagens", "lingua portuguesa", "letras"),
+        "mt": ("matematica",),
+        "essay": ("redacao",),
+    }
+    requested = [
+        key
+        for key, terms in area_aliases.items()
+        if any(term in folded for term in terms)
+    ]
+    keys = requested or list(ENEM_CHANGE_LABELS)
+    values = [
+        (key, ENEM_CHANGE_LABELS[key], averages.get(key))
+        for key in keys
+        if key in ENEM_CHANGE_LABELS
+    ]
+    if not values:
+        return None
+
+    name = str(result.get("name", "")).strip()
+    if tool_name == "get_school_profile":
+        scope = "da escola"
+    elif tool_name == "get_municipality_metrics":
+        scope = f"do munic\u00edpio **{name}**" if name else "do munic\u00edpio"
+    else:
+        scope = "do Maranh\u00e3o"
+
+    available = [item for item in values if isinstance(item[2], (int, float))]
+    if len(values) == 1:
+        _, label, value = values[0]
+        if not isinstance(value, (int, float)):
+            return f"A m\u00e9dia de **{label}** {scope} n\u00e3o est\u00e1 dispon\u00edvel em {year}."
+        return (
+            f"Em {year}, a m\u00e9dia de **{label}** {scope} foi de "
+            f"**{_format_change_value(float(value))} pontos**."
+        )
+
+    if not available:
+        return f"As m\u00e9dias do ENEM {scope} n\u00e3o est\u00e3o dispon\u00edveis em {year}."
+    bullets = []
+    for _, label, value in values:
+        displayed = (
+            f"**{_format_change_value(float(value))} pontos**"
+            if isinstance(value, (int, float))
+            else "n\u00e3o dispon\u00edvel"
+        )
+        bullets.append(f"- **{label}:** {displayed}")
+    return (
+        f"O ENEM n\u00e3o tem uma \u00fanica m\u00e9dia geral nessa consulta. "
+        f"Em {year}, estas foram as m\u00e9dias por \u00e1rea {scope}:\n\n"
+        + "\n".join(bullets)
+    )
+
+
 def _question_data_focus(question: str) -> str | None:
     """Identifica quando a pergunta atual está restrita a um domínio de dados."""
     folded = _fold_text(question)
@@ -536,6 +1212,9 @@ def _question_data_focus(question: str) -> str | None:
             "laboratorio",
             "internet",
             "quadra",
+            "servicos basicos",
+            "espacos escolares",
+            "espacos de aprendizagem",
         )
     )
     if asks_enem and not asks_infrastructure:
@@ -594,8 +1273,8 @@ def _focus_result(result: dict[str, Any], focus: str) -> dict[str, Any]:
 def _focused_evidence(question: str, evidence: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Entrega ao redator apenas o domínio pedido quando o recorte é inequívoco."""
     focus = _question_data_focus(question)
-    if focus is None:
-        return evidence
+    temporal = _asks_temporal_comparison(question)
+    requested_dimensions = _requested_infrastructure_dimensions(question)
 
     focused_evidence: list[dict[str, Any]] = []
     for step in evidence:
@@ -605,7 +1284,66 @@ def _focused_evidence(question: str, evidence: list[dict[str, Any]]) -> list[dic
             focused_item = dict(item)
             result = item.get("result")
             if isinstance(result, dict):
-                focused_item["result"] = _focus_result(result, focus)
+                focused_result = _focus_result(result, focus) if focus else dict(result)
+                if not temporal:
+                    focused_result.pop("history", None)
+                    focused_result.pop("comparisonWithPrevious", None)
+                    focused_result.pop("availableYears", None)
+                if _asks_enem_record_count(question):
+                    focused_result = {
+                        key: value
+                        for key, value in focused_result.items()
+                        if key
+                        in {
+                            "error",
+                            "name",
+                            "kind",
+                            "year",
+                            "records",
+                            "enemRecords",
+                            "source",
+                        }
+                    }
+                if len(requested_dimensions) == 1:
+                    dimension = requested_dimensions[0]
+                    infrastructure = focused_result.get("infrastructure")
+                    if isinstance(infrastructure, dict):
+                        focused_result["infrastructure"] = {
+                            dimension: infrastructure.get(dimension)
+                        }
+                    focused_result.pop("infrastructureScore", None)
+                    focused_result.pop("criticalFactor", None)
+                    resource_keys = {
+                        "basicServices": {
+                            "water",
+                            "publicEnergy",
+                            "publicSewage",
+                            "wasteCollection",
+                        },
+                        "learningSpaces": {
+                            "library",
+                            "scienceLab",
+                            "computerLab",
+                            "sportsCourt",
+                            "cafeteria",
+                        },
+                        "connectivity": {
+                            "internet",
+                            "studentInternet",
+                            "broadband",
+                            "totalDevices",
+                        },
+                        "accessibility": {"accessibleRooms"},
+                        "climate": {"climateControlledRooms"},
+                    }[dimension]
+                    resources = focused_result.get("resources")
+                    if isinstance(resources, dict):
+                        focused_result["resources"] = {
+                            key: value
+                            for key, value in resources.items()
+                            if key in resource_keys
+                        }
+                focused_item["result"] = focused_result
             results.append(focused_item)
         focused_step["results"] = results
         focused_evidence.append(focused_step)
@@ -616,6 +1354,17 @@ def _normalize_plan_for_context(steps: list[PlanStep], state: AgentState) -> lis
     """Corrige comparações escola-município e bloqueia compare_schools inválido."""
     selected_year = state.selection.get("year")
     selected_saeb_year = state.selection.get("saebYear")
+    mentioned_years = list(
+        dict.fromkeys(int(year) for year in re.findall(r"\b(?:19|20)\d{2}\b", state.question))
+    )
+    explicit_year = (
+        mentioned_years[0]
+        if len(mentioned_years) == 1
+        else max(mentioned_years)
+        if _asks_temporal_comparison(state.question) and mentioned_years
+        else None
+    )
+    requested_year = explicit_year or selected_year
     if (
         (
             _asks_for_missing_resources(state.question)
@@ -625,8 +1374,8 @@ def _normalize_plan_for_context(steps: list[PlanStep], state: AgentState) -> lis
         and steps
     ):
         arguments: dict[str, Any] = {"school_code": state.school_code}
-        if isinstance(selected_year, int):
-            arguments["year"] = selected_year
+        if isinstance(requested_year, int):
+            arguments["year"] = requested_year
         return [
             steps[0].model_copy(
                 update={
@@ -721,26 +1470,23 @@ def _normalize_plan_for_context(steps: list[PlanStep], state: AgentState) -> lis
         year_aware_calls = []
         for tool_call in calls:
             arguments = dict(tool_call.arguments)
-            if (
-                isinstance(selected_year, int)
-                and tool_call.tool_name
-                in {
-                    "get_school_profile",
-                    "get_municipality_metrics",
-                    "get_state_metrics",
-                    "compare_schools",
-                    "search_schools",
-                    "calculate_enem_statistics",
-                }
-                and "year" not in arguments
-            ):
-                arguments["year"] = selected_year
-            if (
-                isinstance(selected_saeb_year, int)
-                and tool_call.tool_name == "get_saeb_state_context"
-                and "year" not in arguments
-            ):
-                arguments["year"] = selected_saeb_year
+            if tool_call.tool_name in {
+                "get_school_profile",
+                "get_municipality_metrics",
+                "get_state_metrics",
+                "compare_schools",
+                "search_schools",
+                "calculate_enem_statistics",
+            }:
+                if isinstance(explicit_year, int):
+                    arguments["year"] = explicit_year
+                elif isinstance(selected_year, int) and "year" not in arguments:
+                    arguments["year"] = selected_year
+            if tool_call.tool_name == "get_saeb_state_context":
+                if isinstance(explicit_year, int):
+                    arguments["year"] = explicit_year
+                elif isinstance(selected_saeb_year, int) and "year" not in arguments:
+                    arguments["year"] = selected_saeb_year
             year_aware_calls.append(tool_call.model_copy(update={"arguments": arguments}))
 
         valid_calls = []
@@ -949,10 +1695,12 @@ Iteração atual: {state.iteration}/{state.max_iterations}
             SystemMessage(content=REFLECTOR_SYSTEM_PROMPT),
             HumanMessage(content=prompt),
         ],
+        question=state.question,
     )
 
     return _interpret_reflector_output(
         content,
+        question=state.question,
         iteration=state.iteration,
         max_iterations=state.max_iterations,
         evidence=state.evidence,
@@ -962,6 +1710,7 @@ Iteração atual: {state.iteration}/{state.max_iterations}
 def _interpret_reflector_output(
     content: str,
     *,
+    question: str = "",
     iteration: int,
     max_iterations: int,
     evidence: list[dict[str, Any]],
@@ -989,6 +1738,8 @@ def _interpret_reflector_output(
         )
 
     answer = RESOURCE_KEY_PATTERN.sub("", _collapse_repeated_blocks(answer))
+    answer = PRESENTATION_NOISE_PATTERN.sub("", answer)
+    answer = _strip_redundant_question_heading(question, answer)
 
     if INTERNAL_LANGUAGE_PATTERN.search(answer):
         logger.warning("Internal terminology detected in the final answer; using public fallback.")
@@ -1111,6 +1862,18 @@ async def run_agent(
             "source": "Equipe do ATLAS Escolar",
         }
 
+    unavailable_answer = _known_unavailable_answer(question)
+    if unavailable_answer is not None:
+        await emit(unavailable_answer)
+        return {
+            "answer": unavailable_answer,
+            "iterations": 0,
+            "evidence_count": 0,
+            "engine": "atlas-schema",
+            "mode": "Informa\u00e7\u00e3o n\u00e3o dispon\u00edvel",
+            "source": "Dicion\u00e1rio de Dados ATLAS Escolar",
+        }
+
     app = build_agent_graph()
 
     initial_state = AgentState(
@@ -1123,6 +1886,11 @@ async def run_agent(
     try:
         stream_reflector = not (
             _asks_for_missing_resources(question) or _asks_direct_resource_question(question)
+            or _asks_temporal_comparison(question)
+            or bool(_requested_infrastructure_dimensions(question))
+            or _asks_enem_record_count(question)
+            or _asks_enem_comparison(question)
+            or _asks_enem_summary(question)
         )
         token = _TOKEN_CALLBACK.set(
             emit if on_token is not None and stream_reflector else None
@@ -1134,6 +1902,18 @@ async def run_agent(
         if final_state.error:
             raise RuntimeError(final_state.error)
         answer = _grounded_resource_answer(question, final_state.evidence)
+        if answer is None:
+            answer = _grounded_infrastructure_dimension_answer(
+                question, final_state.evidence
+            )
+        if answer is None:
+            answer = _grounded_temporal_answer(question, final_state.evidence)
+        if answer is None:
+            answer = _grounded_enem_record_answer(question, final_state.evidence)
+        if answer is None:
+            answer = _grounded_enem_comparison_answer(question, final_state.evidence)
+        if answer is None:
+            answer = _grounded_enem_answer(question, final_state.evidence)
         if answer is None:
             answer = final_state.final_answer.strip()
         if not answer:
