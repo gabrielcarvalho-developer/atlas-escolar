@@ -10,6 +10,7 @@ from agent.graph import (
     _conversational_answer,
     _focused_evidence,
     _get_llm,
+    _grounded_available_years_answer,
     _grounded_enem_answer,
     _grounded_enem_comparison_answer,
     _grounded_enem_record_answer,
@@ -980,6 +981,140 @@ def test_explicit_year_overrides_selected_year_in_plan() -> None:
     normalized = _normalize_plan_for_context(steps, state)
 
     assert normalized[0].tool_calls[0].arguments["year"] == 2024
+
+
+def test_selected_year_replaces_planner_invented_year() -> None:
+    state = AgentState(
+        question="Compare os dados desta escola com os anos anteriores.",
+        school_code="21288780",
+        selection={"year": 2025},
+    )
+    steps = [
+        PlanStep(
+            id=1,
+            description="Consultar a s\u00e9rie hist\u00f3rica",
+            tool_calls=[
+                ToolCall(
+                    tool_name="get_school_profile",
+                    arguments={"school_code": "21288780", "year": 2023},
+                    step_id=1,
+                )
+            ],
+        )
+    ]
+
+    normalized = _normalize_plan_for_context(steps, state)
+
+    assert normalized[0].tool_calls[0].arguments["year"] == 2025
+
+
+def test_available_years_question_uses_methodology_contract() -> None:
+    state = AgentState(
+        question="Quais anos anteriores est\u00e3o dispon\u00edveis na base?",
+        school_code="21288780",
+        selection={"year": 2025},
+    )
+    steps = [
+        PlanStep(
+            id=1,
+            description="Consultar os anos",
+            tool_calls=[
+                ToolCall(
+                    tool_name="get_school_profile",
+                    arguments={"school_code": "21288780"},
+                    step_id=1,
+                )
+            ],
+        )
+    ]
+
+    normalized = _normalize_plan_for_context(steps, state)
+
+    assert [call.tool_name for call in normalized[0].tool_calls] == [
+        "get_data_methodology"
+    ]
+    assert normalized[0].tool_calls[0].arguments == {}
+
+
+def test_school_year_availability_keeps_the_school_scope() -> None:
+    state = AgentState(
+        question="H\u00e1 dados desta escola em 2024?",
+        school_code="21288780",
+        selection={"year": 2025},
+    )
+    steps = [
+        PlanStep(
+            id=1,
+            description="Consultar a escola",
+            tool_calls=[
+                ToolCall(
+                    tool_name="get_school_profile",
+                    arguments={"school_code": "21288780"},
+                    step_id=1,
+                )
+            ],
+        )
+    ]
+
+    normalized = _normalize_plan_for_context(steps, state)
+
+    assert normalized[0].tool_calls[0].tool_name == "get_school_profile"
+    assert normalized[0].tool_calls[0].arguments["year"] == 2024
+
+
+def test_available_previous_years_answer_is_grounded_in_manifest() -> None:
+    evidence = [
+        {
+            "step_id": 1,
+            "results": [
+                {
+                    "tool": "get_data_methodology",
+                    "result": {
+                        "availableYears": {
+                            "censusEnem": [2025, 2024],
+                            "saeb": [2023, 2021],
+                        }
+                    },
+                }
+            ],
+        }
+    ]
+
+    answer = _grounded_available_years_answer(
+        "Quais anos anteriores est\u00e3o dispon\u00edveis na base?",
+        evidence,
+        {"year": 2025},
+    )
+
+    assert answer == (
+        "Sim. Em rela\u00e7\u00e3o ao ano selecionado (2025), a base integrada do "
+        "Censo Escolar e do ENEM tamb\u00e9m possui dados de 2024."
+    )
+
+
+def test_explicit_available_year_answer_confirms_2024() -> None:
+    evidence = [
+        {
+            "step_id": 1,
+            "results": [
+                {
+                    "tool": "get_data_methodology",
+                    "result": {
+                        "availableYears": {
+                            "censusEnem": [2025, 2024],
+                            "saeb": [2023, 2021],
+                        }
+                    },
+                }
+            ],
+        }
+    ]
+
+    answer = _grounded_available_years_answer("H\u00e1 dados de 2024?", evidence)
+
+    assert answer == (
+        "Sim. A base integrada do Censo Escolar e do ENEM possui dados de 2024."
+    )
 
 
 def test_temporal_comparison_queries_the_latest_mentioned_year() -> None:

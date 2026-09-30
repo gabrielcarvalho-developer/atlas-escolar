@@ -794,8 +794,161 @@ def _asks_temporal_comparison(question: str) -> bool:
             "avanco",
             "recuo",
             "ano anterior",
+            "anos anteriores",
             "entre os anos",
         )
+    )
+
+
+def _asks_available_years(question: str) -> bool:
+    """Identify questions about which annual datasets exist, not their metrics."""
+    folded = _fold_text(question)
+    if re.search(r"\b(?:escola|municipio|cidade)\b", folded):
+        return False
+    if any(
+        term in folded
+        for term in (
+            "compare",
+            "comparacao",
+            "evolu",
+            "melhorou",
+            "piorou",
+            "mudou",
+            "mudanca",
+        )
+    ):
+        return False
+
+    asks_which_years = any(
+        term in folded
+        for term in (
+            "quais anos",
+            "que anos",
+            "anos disponiveis",
+            "ano disponivel",
+            "anos anteriores",
+            "dados de anos anteriores",
+            "bases anteriores",
+        )
+    )
+    if asks_which_years:
+        return True
+
+    mentioned_year = bool(re.search(r"\b(?:19|20)\d{2}\b", question))
+    asks_if_exists = any(
+        term in folded
+        for term in (
+            "ha dados",
+            "ha base",
+            "tem dados",
+            "tem base",
+            "existe dado",
+            "existe base",
+            "base de",
+            "base de dados",
+            "base do ano",
+            "base em",
+        )
+    )
+    return mentioned_year and asks_if_exists
+
+
+def _grounded_available_years_answer(
+    question: str,
+    evidence: list[dict[str, Any]],
+    selection: dict[str, Any] | None = None,
+) -> str | None:
+    """Answer dataset-year availability directly from the methodology contract."""
+    if not _asks_available_years(question):
+        return None
+
+    available: dict[str, Any] | None = None
+    for step in reversed(evidence):
+        for item in reversed(step.get("results", [])):
+            result = item.get("result")
+            candidate = result.get("availableYears") if isinstance(result, dict) else None
+            if isinstance(candidate, dict):
+                available = candidate
+                break
+        if available is not None:
+            break
+    if available is None:
+        return None
+
+    census_enem = sorted(
+        year for year in available.get("censusEnem", []) if isinstance(year, int)
+    )
+    saeb = sorted(year for year in available.get("saeb", []) if isinstance(year, int))
+    folded = _fold_text(question)
+    mentioned_years = sorted(
+        {int(year) for year in re.findall(r"\b(?:19|20)\d{2}\b", question)}
+    )
+
+    def year_list(years: list[int]) -> str:
+        if not years:
+            return "nenhum ano"
+        if len(years) == 1:
+            return str(years[0])
+        return ", ".join(str(year) for year in years[:-1]) + f" e {years[-1]}"
+
+    asks_saeb = "saeb" in folded
+    asks_census_enem = "enem" in folded or "censo" in folded
+
+    if mentioned_years:
+        sentences = []
+        for year in mentioned_years:
+            in_census_enem = year in census_enem
+            in_saeb = year in saeb
+            if asks_saeb:
+                prefix = "Sim" if in_saeb else "N\u00e3o"
+                availability = "possui" if in_saeb else "n\u00e3o possui"
+                sentences.append(
+                    f"{prefix}. O SAEB {availability} dados de {year}."
+                )
+            elif asks_census_enem:
+                prefix = "Sim" if in_census_enem else "N\u00e3o"
+                availability = "possui" if in_census_enem else "n\u00e3o possui"
+                sentences.append(
+                    f"{prefix}. A base integrada do Censo Escolar e do ENEM "
+                    f"{availability} dados de {year}."
+                )
+            elif in_census_enem:
+                sentences.append(
+                    f"Sim. A base integrada do Censo Escolar e do ENEM possui dados de {year}."
+                )
+            elif in_saeb:
+                sentences.append(f"Sim. H\u00e1 dados de {year} no contexto estadual do SAEB.")
+            else:
+                sentences.append(
+                    f"N\u00e3o. N\u00e3o h\u00e1 dados de {year} nas bases anuais dispon\u00edveis."
+                )
+        return " ".join(sentences)
+
+    selected_year = (selection or {}).get("year")
+    if "anterior" in folded and isinstance(selected_year, int):
+        previous_years = [year for year in census_enem if year < selected_year]
+        if previous_years:
+            return (
+                f"Sim. Em rela\u00e7\u00e3o ao ano selecionado ({selected_year}), "
+                "a base integrada do Censo Escolar e do ENEM tamb\u00e9m possui dados de "
+                f"{year_list(previous_years)}."
+            )
+        return (
+            f"N\u00e3o h\u00e1 ano anterior a {selected_year} na base integrada do "
+            f"Censo Escolar e do ENEM. Os anos dispon\u00edveis s\u00e3o {year_list(census_enem)}."
+        )
+
+    if asks_saeb:
+        return f"Os anos dispon\u00edveis para o SAEB s\u00e3o {year_list(saeb)}."
+    if asks_census_enem:
+        return (
+            "A base integrada do Censo Escolar e do ENEM possui dados de "
+            f"{year_list(census_enem)}."
+        )
+    return (
+        "A base integrada do Censo Escolar e do ENEM possui dados de "
+        f"{year_list(census_enem)}. Para o contexto estadual do SAEB, os anos "
+        f"dispon\u00edveis s\u00e3o {year_list(saeb)}."
     )
 
 
@@ -1365,6 +1518,20 @@ def _normalize_plan_for_context(steps: list[PlanStep], state: AgentState) -> lis
         else None
     )
     requested_year = explicit_year or selected_year
+    if _asks_available_years(state.question) and steps:
+        return [
+            steps[0].model_copy(
+                update={
+                    "tool_calls": [
+                        ToolCall(
+                            tool_name="get_data_methodology",
+                            arguments={},
+                            step_id=steps[0].id,
+                        )
+                    ]
+                }
+            )
+        ]
     if (
         (
             _asks_for_missing_resources(state.question)
@@ -1480,12 +1647,12 @@ def _normalize_plan_for_context(steps: list[PlanStep], state: AgentState) -> lis
             }:
                 if isinstance(explicit_year, int):
                     arguments["year"] = explicit_year
-                elif isinstance(selected_year, int) and "year" not in arguments:
+                elif isinstance(selected_year, int):
                     arguments["year"] = selected_year
             if tool_call.tool_name == "get_saeb_state_context":
                 if isinstance(explicit_year, int):
                     arguments["year"] = explicit_year
-                elif isinstance(selected_saeb_year, int) and "year" not in arguments:
+                elif isinstance(selected_saeb_year, int):
                     arguments["year"] = selected_saeb_year
             year_aware_calls.append(tool_call.model_copy(update={"arguments": arguments}))
 
@@ -1887,6 +2054,7 @@ async def run_agent(
         stream_reflector = not (
             _asks_for_missing_resources(question) or _asks_direct_resource_question(question)
             or _asks_temporal_comparison(question)
+            or _asks_available_years(question)
             or bool(_requested_infrastructure_dimensions(question))
             or _asks_enem_record_count(question)
             or _asks_enem_comparison(question)
@@ -1901,7 +2069,13 @@ async def run_agent(
             _TOKEN_CALLBACK.reset(token)
         if final_state.error:
             raise RuntimeError(final_state.error)
-        answer = _grounded_resource_answer(question, final_state.evidence)
+        answer = _grounded_available_years_answer(
+            question,
+            final_state.evidence,
+            final_state.selection,
+        )
+        if answer is None:
+            answer = _grounded_resource_answer(question, final_state.evidence)
         if answer is None:
             answer = _grounded_infrastructure_dimension_answer(
                 question, final_state.evidence
