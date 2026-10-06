@@ -27,13 +27,13 @@ Para adicionar um ano, inclua em `data/incoming/bases/` o trio Censo/ENEM com o 
 
 ## Assistente via MCP
 
-O assistente usa um único fluxo: `Next.js -> API Python/LangGraph -> MCP -> dados`. A API entrega status e a resposta ao navegador por SSE (`POST /api/agent/stream`), com keep-alive durante o processamento. Provedores com streaming OpenAI compatível enviam os chunks nativos; gateways Llama que podem devolver deltas fora do padrão usam a conclusão completa para evitar respostas interrompidas. Não há resposta Llama direta nem fallback determinístico no Next.js. Se a API ou o MCP estiverem indisponíveis, a interface informa a indisponibilidade em vez de gerar uma resposta por outro mecanismo.
+O assistente usa um único fluxo: `Next.js -> API Python/LangGraph -> MCP -> dados`. A API entrega status e a resposta ao navegador por SSE (`POST /api/agent/stream`), com keep-alive durante o processamento. Provedores com streaming OpenAI compatível enviam os chunks nativos; gateways Llama que podem devolver deltas fora do padrão usam a conclusão completa para evitar respostas interrompidas. Consultas estruturadas comuns — ENEM, infraestrutura, recursos, histórico, comparações, SAEB, metodologia, busca de escola e dados da equipe — possuem rotas diretas e auditáveis na API Python. Perguntas abertas continuam usando o LangGraph. Não há geração alternativa no Next.js: se a API ou o MCP estiverem indisponíveis, a interface informa a indisponibilidade.
 
 O servidor MCP expõe oito ferramentas auditáveis. Por padrão, a API Python o inicia por `stdio`; ele também possui transporte SSE nativo, com conexão em `GET /sse` e envio das mensagens MCP em `POST /messages/`. Para um servidor remoto, `MCP_SERVER_URL` aceita tanto o endpoint SSE quanto um endpoint Streamable HTTP sem alterar o agente.
 
 Copie `python/.env.example` para `python/.env.local`, escolha `LLM_PROVIDER` e preencha somente as credenciais do provedor escolhido. Para Cloudflare Workers AI, a URL curta da conta (`https://api.cloudflare.com/client/v4/accounts/{id}`) é normalizada automaticamente para a API OpenAI-compatible.
 
-As credenciais do modelo ficam somente na API Python e nunca são enviadas ao navegador. Sem a configuração válida do agente, a interface falha explicitamente e não troca silenciosamente de motor.
+As credenciais do modelo ficam somente na API Python e nunca são enviadas ao navegador. Sem uma configuração válida do modelo, `/health` informa estado `degraded`; as consultas estruturadas continuam disponíveis e pedidos abertos recebem uma orientação segura para reformular a pergunta. O sistema não inventa dados nem troca silenciosamente de provedor.
 
 ### Base institucional da equipe
 

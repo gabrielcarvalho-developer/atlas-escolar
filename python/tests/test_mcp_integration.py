@@ -247,8 +247,11 @@ def test_school_foundation_is_reported_as_unavailable() -> None:
     assert "2025" not in answer
 
 
-def test_project_creation_question_is_not_treated_as_school_foundation() -> None:
-    assert _known_unavailable_answer("Quando o projeto Atlas foi criado?") is None
+def test_project_creation_question_reports_missing_institutional_date() -> None:
+    answer = _known_unavailable_answer("Quando o projeto Atlas foi criado?")
+
+    assert answer is not None
+    assert "não registra a data de criação do projeto" in answer
 
 
 async def test_foundation_question_bypasses_the_analytical_agent(monkeypatch) -> None:
@@ -1428,3 +1431,155 @@ def test_direct_resource_question_normalizes_plan_to_school_profile() -> None:
             step_id=1,
         )
     ]
+
+
+async def test_common_questions_answer_without_a_language_model(monkeypatch) -> None:
+    monkeypatch.setattr(
+        agent_graph,
+        "create_mcp_client",
+        lambda: Client(mcp, read_timeout_seconds=5),
+    )
+    selection = {
+        "analysisLevel": "school",
+        "municipality": "Coelho Neto",
+        "year": 2025,
+        "saebYear": 2023,
+    }
+    cases = (
+        ("A escola tem laboratório de ciências?", "laboratório de ciências"),
+        ("Quantos registros do ENEM esta escola tem?", "128 registros do ENEM"),
+        ("A escola evoluiu no ENEM entre 2024 e 2025?", "3 indicadores melhoraram"),
+        ("Há dados desta escola em 2024?", "Sim. Há dados desta escola em 2024"),
+        ("Quais anos estão disponíveis na base?", "2021 e 2023"),
+        ("Qual é o resultado do SAEB do Maranhão em 2023?", "Matemática 197,22 pontos"),
+        ("Compare o SAEB do Maranhão em 2021 e 2023.", "2021 · 5º ano"),
+        ("Qual é o principal gargalo de infraestrutura desta escola?", "Serviços básicos"),
+        (
+            "Faça uma análise rápida dos principais indicadores desta escola.",
+            "leitura rápida da escola",
+        ),
+        ("Quais são os principais pontos de atenção desta escola?", "queda de 62,53 pontos"),
+        ("A escola tinha laboratório de ciências em 2023?", "Não há dados de Censo Escolar"),
+        ("Qual é o nome da escola selecionada?", "IEMA PLENO COELHO NETO"),
+        ("Quantas escolas públicas existem neste município?", "46 escolas públicas"),
+        ("Encontre a escola IEMA Pleno Coelho Neto.", "código INEP 21288780"),
+    )
+
+    for question, expected in cases:
+        result = await agent_graph.run_agent(
+            question,
+            school_code="21288780",
+            selection=selection,
+        )
+
+        assert result["engine"] == "mcp-direct", question
+        assert expected in result["answer"], question
+        assert result.get("error") is None, question
+
+
+async def test_school_territory_comparisons_answer_without_a_language_model(
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(
+        agent_graph,
+        "create_mcp_client",
+        lambda: Client(mcp, read_timeout_seconds=5),
+    )
+    selection = {
+        "analysisLevel": "school",
+        "municipality": "Coelho Neto",
+        "year": 2025,
+    }
+
+    municipality = await agent_graph.run_agent(
+        "Compare as médias do ENEM desta escola com as médias do município.",
+        school_code="21288780",
+        selection=selection,
+    )
+    state = await agent_graph.run_agent(
+        "Compare esta escola com o Maranhão no ENEM.",
+        school_code="21288780",
+        selection=selection,
+    )
+
+    assert municipality["engine"] == "mcp-direct"
+    assert "acima da média de **Coelho Neto** em 4 das 5 áreas" in municipality["answer"]
+    assert "119 a 124 participantes" in municipality["answer"]
+    assert state["engine"] == "mcp-direct"
+    assert "média do **Maranhão**" in state["answer"]
+
+
+async def test_year_follow_up_reuses_previous_question_without_llm(monkeypatch) -> None:
+    monkeypatch.setattr(
+        agent_graph,
+        "create_mcp_client",
+        lambda: Client(mcp, read_timeout_seconds=5),
+    )
+    history = [
+        {
+            "role": "user",
+            "content": "Qual foi a média de matemática desta escola em 2025?",
+        },
+        {
+            "role": "assistant",
+            "content": "Em 2025, a média de Matemática foi de 452,84 pontos.",
+        },
+    ]
+
+    result = await agent_graph.run_agent(
+        "E em 2024?",
+        history=history,
+        school_code="21288780",
+        selection={"analysisLevel": "school", "year": 2025},
+    )
+
+    assert result["engine"] == "mcp-direct"
+    assert "467,27 pontos" in result["answer"]
+    assert "120 participantes" in result["answer"]
+
+
+async def test_team_question_has_grounded_fallback_without_llm(monkeypatch) -> None:
+    def unavailable_llm():
+        raise RuntimeError("model not configured")
+
+    monkeypatch.setattr(agent_graph, "_get_llm", unavailable_llm)
+
+    result = await agent_graph.run_agent("Quem desenvolveu você?")
+
+    assert result["engine"] == "project-knowledge-rag"
+    assert "Erick MacGregor Santos Lima" in result["answer"]
+    assert "Francisco William e Mairron Lorran" in result["answer"]
+    assert "Marcelo Augusto, Luciely Beatriz e Larissa Thauana" in result["answer"]
+
+
+async def test_small_enem_samples_are_visible_and_warned(monkeypatch) -> None:
+    monkeypatch.setattr(
+        agent_graph,
+        "create_mcp_client",
+        lambda: Client(mcp, read_timeout_seconds=5),
+    )
+
+    result = await agent_graph.run_agent(
+        "Quais foram as médias do ENEM desta escola em 2025?",
+        school_code="21001685",
+        selection={"analysisLevel": "school", "municipality": "Bacuri", "year": 2025},
+    )
+
+    assert result["engine"] == "mcp-direct"
+    assert "25 participantes" in result["answer"]
+    assert "23 participantes" in result["answer"]
+    assert "menos de 30 participantes" in result["answer"]
+    assert "cautela" in result["answer"]
+
+
+def test_health_configuration_status_reports_missing_model_credentials(monkeypatch) -> None:
+    monkeypatch.setenv("LLM_PROVIDER", "openai")
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+
+    status = agent_graph.get_llm_configuration_status()
+
+    assert status == {
+        "provider": "openai",
+        "configured": False,
+        "missing": ["OPENAI_API_KEY"],
+    }

@@ -17,7 +17,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
-from agent.graph import run_agent
+from agent.graph import get_llm_configuration_status, run_agent
 from agent.mcp_client import verify_mcp_tools
 
 PYTHON_DIR = Path(__file__).resolve().parent
@@ -211,11 +211,14 @@ async def health() -> dict[str, Any]:
     except Exception as exc:
         logger.exception("MCP health check failed")
         raise HTTPException(status_code=503, detail="Servidor MCP indisponivel.") from exc
+    llm = get_llm_configuration_status()
     return {
-        "status": "ok",
+        "status": "ok" if llm["configured"] else "degraded",
         "engine": "mcp-langgraph",
         "mcp_tools": sorted(tools),
-        "llm_provider": os.environ.get("LLM_PROVIDER", "openai"),
+        "llm_provider": llm["provider"],
+        "llm_configured": llm["configured"],
+        "deterministic_queries_available": True,
     }
 
 
