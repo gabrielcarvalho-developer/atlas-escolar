@@ -1252,8 +1252,16 @@ def _asks_enem_summary(question: str) -> bool:
     )
     has_measure = any(term in folded for term in ("media", "nota", "desempenho"))
     has_comparison = any(term in folded for term in ("compar", "versus", "diferenca"))
+    generic_school_performance = (
+        "desempenho" in folded
+        and "saeb" not in folded
+        and not any(
+            term in folded
+            for term in ("infraestrutura", "estrutura", "recurso", "gargalo")
+        )
+    )
     return (
-        has_subject
+        (has_subject or generic_school_performance)
         and has_measure
         and not has_comparison
         and not _asks_temporal_comparison(question)
@@ -1337,6 +1345,112 @@ def _grounded_enem_answer(
         f"Em {year}, estas foram as m\u00e9dias por \u00e1rea {scope}:\n\n"
         + "\n".join(bullets)
     )
+
+
+def _direct_enem_call(
+    question: str,
+    school_code: str | None,
+    selection: dict[str, Any] | None,
+) -> tuple[str, dict[str, Any]] | None:
+    """Resolve consultas objetivas de desempenho sem depender do planejamento do LLM."""
+    if not _asks_enem_summary(question):
+        return None
+
+    years = list(
+        dict.fromkeys(int(year) for year in re.findall(r"\b(?:19|20)\d{2}\b", question))
+    )
+    if len(years) > 1:
+        return None
+
+    active_selection = selection or {}
+    requested_year = years[0] if years else active_selection.get("year")
+    folded = _fold_text(question)
+    analysis_level = active_selection.get("analysisLevel")
+
+    asks_school = any(term in folded for term in ("escola", "colegio"))
+    asks_municipality = any(term in folded for term in ("municipio", "cidade"))
+    asks_state = any(term in folded for term in ("estado", "maranhao"))
+
+    if asks_school or (
+        not asks_municipality and not asks_state and analysis_level == "school"
+    ):
+        if not school_code or not re.fullmatch(r"\d{8}", school_code):
+            return None
+        arguments: dict[str, Any] = {"school_code": school_code}
+        tool_name = "get_school_profile"
+    elif asks_municipality or analysis_level == "municipality":
+        municipality = str(active_selection.get("municipality", "")).strip()
+        if not municipality:
+            return None
+        arguments = {"municipality_name": municipality}
+        tool_name = "get_municipality_metrics"
+    else:
+        arguments = {}
+        tool_name = "get_state_metrics"
+
+    if isinstance(requested_year, int):
+        arguments["year"] = requested_year
+    return tool_name, arguments
+
+
+async def _direct_enem_response(
+    question: str,
+    school_code: str | None,
+    selection: dict[str, Any] | None,
+) -> dict[str, Any] | None:
+    """Consulta o MCP e formata respostas diretas de desempenho por ano."""
+    call = _direct_enem_call(question, school_code, selection)
+    if call is None:
+        return None
+
+    tool_name, arguments = call
+    async with create_mcp_client() as client:
+        raw_result = await client.call_tool(tool_name, arguments)
+        result = decode_tool_result(raw_result)
+
+    requested_year = arguments.get("year")
+    if result.get("error"):
+        available_years = result.get("availableYearsForSchool")
+        if (
+            tool_name == "get_school_profile"
+            and isinstance(requested_year, int)
+            and isinstance(available_years, list)
+        ):
+            available = sorted(year for year in available_years if isinstance(year, int))
+            if available:
+                listed = " e ".join(str(year) for year in available)
+                answer = (
+                    f"N\u00e3o h\u00e1 dados desta escola em {requested_year}. "
+                    f"Os anos dispon\u00edveis para ela s\u00e3o {listed}."
+                )
+                return {
+                    "answer": answer,
+                    "source": "Atlas Escolar",
+                    "iterations": 0,
+                    "evidence_count": 1,
+                    "engine": "mcp-direct",
+                    "mode": "Consulta direta aos dados do Atlas",
+                }
+        return None
+
+    evidence = [
+        {
+            "step_id": 1,
+            "description": "Consultar desempenho no ano solicitado",
+            "results": [{"tool": tool_name, "result": result}],
+        }
+    ]
+    answer = _grounded_enem_answer(question, evidence)
+    if answer is None:
+        return None
+    return {
+        "answer": answer,
+        "source": str(result.get("source", "Atlas Escolar")),
+        "iterations": 0,
+        "evidence_count": 1,
+        "engine": "mcp-direct",
+        "mode": "Consulta direta aos dados do Atlas",
+    }
 
 
 def _question_data_focus(question: str) -> str | None:
@@ -2040,6 +2154,19 @@ async def run_agent(
             "mode": "Informa\u00e7\u00e3o n\u00e3o dispon\u00edvel",
             "source": "Dicion\u00e1rio de Dados ATLAS Escolar",
         }
+
+    try:
+        direct_enem_response = await _direct_enem_response(
+            question,
+            school_code,
+            selection,
+        )
+    except Exception:
+        logger.exception("Direct ENEM query failed; falling back to the agent graph")
+        direct_enem_response = None
+    if direct_enem_response is not None:
+        await emit(str(direct_enem_response["answer"]))
+        return direct_enem_response
 
     app = build_agent_graph()
 

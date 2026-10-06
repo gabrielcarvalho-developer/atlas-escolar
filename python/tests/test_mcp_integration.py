@@ -8,6 +8,7 @@ from agent.graph import (
     _TOKEN_CALLBACK,
     _collapse_repeated_blocks,
     _conversational_answer,
+    _direct_enem_call,
     _focused_evidence,
     _get_llm,
     _grounded_available_years_answer,
@@ -981,6 +982,39 @@ def test_explicit_year_overrides_selected_year_in_plan() -> None:
     normalized = _normalize_plan_for_context(steps, state)
 
     assert normalized[0].tool_calls[0].arguments["year"] == 2024
+
+
+def test_direct_school_performance_uses_explicit_previous_year() -> None:
+    call = _direct_enem_call(
+        "Como foi o desempenho na escola no ano de 2024?",
+        "21288780",
+        {"analysisLevel": "school", "year": 2025},
+    )
+
+    assert call == (
+        "get_school_profile",
+        {"school_code": "21288780", "year": 2024},
+    )
+
+
+async def test_direct_school_performance_answers_without_llm(monkeypatch) -> None:
+    monkeypatch.setattr(agent_graph, "retrieve_project_knowledge", lambda *args: [])
+    monkeypatch.setattr(
+        agent_graph,
+        "create_mcp_client",
+        lambda: Client(mcp, read_timeout_seconds=5),
+    )
+
+    result = await agent_graph.run_agent(
+        "Como foi o desempenho na escola no ano de 2024?",
+        school_code="21288780",
+        selection={"analysisLevel": "school", "year": 2025},
+    )
+
+    assert result["engine"] == "mcp-direct"
+    assert result["evidence_count"] == 1
+    assert "Em 2024" in result["answer"]
+    assert "2025" not in result["answer"]
 
 
 def test_selected_year_replaces_planner_invented_year() -> None:
