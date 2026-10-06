@@ -563,7 +563,7 @@ function TerritoryOverview({
               </div>
             ))}
           </div>
-          <div className="mt-5 flex items-center justify-between">
+          <div className="flex flex-1 items-center justify-between py-5">
             <div>
               <p className="text-[11px] text-[var(--muted)]">
                 Dispositivos para alunos
@@ -576,7 +576,7 @@ function TerritoryOverview({
               <MonitorSmartphone size={19} />
             </span>
           </div>
-          <div className="mt-auto pt-5">
+          <div className="pt-5">
             <div className="grid gap-3 border-t border-[var(--line)] pt-4 text-xs">
               <div className="flex justify-between gap-4">
                 <span className="text-[var(--muted)]">Salas climatizadas</span>
