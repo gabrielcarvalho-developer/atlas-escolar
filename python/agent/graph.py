@@ -779,11 +779,37 @@ def _grounded_infrastructure_dimension_answer(
     return answer
 
 
+def _asks_best_enem_year(question: str) -> bool:
+    """Identify requests to rank the available ENEM years."""
+    folded = _fold_text(question)
+    asks_year = "ano" in folded
+    asks_performance = any(
+        term in folded
+        for term in ("enem", "desempenho", "media", "nota", "resultado")
+    )
+    asks_ranking = any(
+        term in folded
+        for term in (
+            "foi melhor",
+            "foi pior",
+            "melhor ano",
+            "pior ano",
+            "maior desempenho",
+            "menor desempenho",
+            "maior nota",
+            "menor nota",
+            "melhor resultado",
+            "pior resultado",
+        )
+    )
+    return asks_year and asks_performance and asks_ranking
+
+
 def _asks_temporal_comparison(question: str) -> bool:
     """Identify questions about change across years."""
     folded = _fold_text(question)
     years = re.findall(r"\b(?:19|20)\d{2}\b", question)
-    return len(set(years)) >= 2 or any(
+    return _asks_best_enem_year(question) or len(set(years)) >= 2 or any(
         term in folded
         for term in (
             "evolu",
@@ -1347,13 +1373,103 @@ def _grounded_enem_answer(
     )
 
 
+def _grounded_best_enem_year_answer(
+    question: str, evidence: list[dict[str, Any]]
+) -> str | None:
+    """Compare only years present in the ENEM history, without inventing an aggregate."""
+    if not _asks_best_enem_year(question):
+        return None
+
+    histories: list[list[dict[str, Any]]] = []
+    for step in evidence:
+        for item in step.get("results", []):
+            result = item.get("result")
+            history = result.get("history") if isinstance(result, dict) else None
+            if isinstance(history, list):
+                valid_points = [
+                    point
+                    for point in history
+                    if isinstance(point, dict)
+                    and isinstance(point.get("year"), int)
+                    and isinstance(point.get("averages"), dict)
+                ]
+                if len(valid_points) >= 2:
+                    histories.append(valid_points)
+    if len(histories) != 1:
+        return None
+
+    history = histories[0]
+    years = sorted({int(point["year"]) for point in history})
+    winners_by_year: dict[int, list[tuple[str, float]]] = {year: [] for year in years}
+    ties: list[tuple[str, float, list[int]]] = []
+
+    for key, label in ENEM_CHANGE_LABELS.items():
+        values = [
+            (int(point["year"]), float(point["averages"][key]))
+            for point in history
+            if isinstance(point["averages"].get(key), (int, float))
+        ]
+        if len(values) < 2:
+            continue
+        best_value = max(value for _, value in values)
+        winning_years = [year for year, value in values if value == best_value]
+        if len(winning_years) > 1:
+            ties.append((label, best_value, winning_years))
+            continue
+        winners_by_year[winning_years[0]].append((label, best_value))
+
+    winners_by_year = {
+        year: values for year, values in winners_by_year.items() if values
+    }
+    if not winners_by_year and not ties:
+        return None
+
+    year_range = " e ".join(str(year) for year in years)
+    if len(winners_by_year) == 1 and not ties:
+        winning_year = next(iter(winners_by_year))
+        opening = (
+            f"Em {winning_year}, a escola teve resultados mais altos em todas as "
+            f"\u00e1reas compar\u00e1veis do ENEM entre {year_range}."
+        )
+    else:
+        opening = (
+            "N\u00e3o h\u00e1 um \u00fanico ano melhor em todas as \u00e1reas do ENEM. "
+            f"Entre {year_range}, cada ano se destacou em componentes diferentes."
+        )
+
+    bullets = []
+    for year, values in sorted(
+        winners_by_year.items(),
+        key=lambda item: (-len(item[1]), -item[0]),
+    ):
+        details = ", ".join(
+            f"{label} ({_format_change_value(value)} pontos)"
+            for label, value in values
+        )
+        bullets.append(f"- **{year}:** {details}")
+    if ties:
+        details = ", ".join(
+            f"{label} ({_format_change_value(value)} pontos)"
+            for label, value, _ in ties
+        )
+        bullets.append(f"- **Empate entre os anos:** {details}")
+
+    return (
+        opening
+        + "\n\n"
+        + "\n".join(bullets)
+        + "\n\nO ENEM n\u00e3o fornece uma m\u00e9dia geral \u00fanica nesta consulta; "
+        "por isso, a compara\u00e7\u00e3o deve ser feita por \u00e1rea."
+    )
+
+
 def _direct_enem_call(
     question: str,
     school_code: str | None,
     selection: dict[str, Any] | None,
 ) -> tuple[str, dict[str, Any]] | None:
     """Resolve consultas objetivas de desempenho sem depender do planejamento do LLM."""
-    if not _asks_enem_summary(question):
+    if not (_asks_enem_summary(question) or _asks_best_enem_year(question)):
         return None
 
     years = list(
@@ -1404,12 +1520,37 @@ async def _direct_enem_response(
         return None
 
     tool_name, arguments = call
+    methodology: dict[str, Any] | None = None
     async with create_mcp_client() as client:
         raw_result = await client.call_tool(tool_name, arguments)
         result = decode_tool_result(raw_result)
+        if result.get("error") and isinstance(arguments.get("year"), int):
+            raw_methodology = await client.call_tool("get_data_methodology", {})
+            methodology = decode_tool_result(raw_methodology)
 
     requested_year = arguments.get("year")
     if result.get("error"):
+        available = (
+            methodology.get("availableYears", {}).get("censusEnem", [])
+            if isinstance(methodology, dict)
+            and isinstance(methodology.get("availableYears"), dict)
+            else []
+        )
+        available = sorted(year for year in available if isinstance(year, int))
+        if isinstance(requested_year, int) and available and requested_year not in available:
+            listed = " e ".join(str(year) for year in available)
+            answer = (
+                f"N\u00e3o h\u00e1 dados de Censo Escolar e ENEM para {requested_year}. "
+                f"Os anos dispon\u00edveis s\u00e3o {listed}."
+            )
+            return {
+                "answer": answer,
+                "source": "Dicion\u00e1rio de Dados ATLAS Escolar",
+                "iterations": 0,
+                "evidence_count": 2,
+                "engine": "mcp-direct",
+                "mode": "Consulta direta aos dados do Atlas",
+            }
         available_years = result.get("availableYearsForSchool")
         if (
             tool_name == "get_school_profile"
@@ -1440,12 +1581,25 @@ async def _direct_enem_response(
             "results": [{"tool": tool_name, "result": result}],
         }
     ]
-    answer = _grounded_enem_answer(question, evidence)
+    answer = _grounded_best_enem_year_answer(question, evidence)
+    if answer is None:
+        answer = _grounded_enem_answer(question, evidence)
     if answer is None:
         return None
+    history = result.get("history")
+    history_years = sorted(
+        point["year"]
+        for point in history
+        if isinstance(point, dict) and isinstance(point.get("year"), int)
+    ) if isinstance(history, list) else []
+    source = str(result.get("source", "Atlas Escolar"))
+    if _asks_best_enem_year(question) and history_years:
+        source = (
+            f"ENEM e Censo Escolar {history_years[0]}\u2013{history_years[-1]}"
+        )
     return {
         "answer": answer,
-        "source": str(result.get("source", "Atlas Escolar")),
+        "source": source,
         "iterations": 0,
         "evidence_count": 1,
         "engine": "mcp-direct",
@@ -2203,6 +2357,10 @@ async def run_agent(
         )
         if answer is None:
             answer = _grounded_resource_answer(question, final_state.evidence)
+        if answer is None:
+            answer = _grounded_best_enem_year_answer(
+                question, final_state.evidence
+            )
         if answer is None:
             answer = _grounded_infrastructure_dimension_answer(
                 question, final_state.evidence

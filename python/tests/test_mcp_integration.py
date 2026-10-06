@@ -6,12 +6,14 @@ from agent import graph as agent_graph
 from agent import mcp_client
 from agent.graph import (
     _TOKEN_CALLBACK,
+    _asks_temporal_comparison,
     _collapse_repeated_blocks,
     _conversational_answer,
     _direct_enem_call,
     _focused_evidence,
     _get_llm,
     _grounded_available_years_answer,
+    _grounded_best_enem_year_answer,
     _grounded_enem_answer,
     _grounded_enem_comparison_answer,
     _grounded_enem_record_answer,
@@ -1015,6 +1017,107 @@ async def test_direct_school_performance_answers_without_llm(monkeypatch) -> Non
     assert result["evidence_count"] == 1
     assert "Em 2024" in result["answer"]
     assert "2025" not in result["answer"]
+
+
+def test_best_enem_year_question_is_a_temporal_comparison() -> None:
+    assert _asks_temporal_comparison(
+        "Em qual ano essa escola foi melhor no ENEM?"
+    )
+
+
+def test_best_enem_year_answer_uses_only_evidence_history() -> None:
+    evidence = [
+        {
+            "step_id": 1,
+            "results": [
+                {
+                    "tool": "get_school_profile",
+                    "result": {
+                        "history": [
+                            {
+                                "year": 2024,
+                                "averages": {
+                                    "cn": 445.24,
+                                    "ch": 469.64,
+                                    "lc": 489.89,
+                                    "mt": 467.27,
+                                    "essay": 651.4,
+                                },
+                            },
+                            {
+                                "year": 2025,
+                                "averages": {
+                                    "cn": 453.39,
+                                    "ch": 480.34,
+                                    "lc": 500.4,
+                                    "mt": 452.84,
+                                    "essay": 588.87,
+                                },
+                            },
+                        ]
+                    },
+                }
+            ],
+        }
+    ]
+
+    answer = _grounded_best_enem_year_answer(
+        "Em qual ano essa escola foi melhor no ENEM?",
+        evidence,
+    )
+
+    assert answer is not None
+    assert "N\u00e3o h\u00e1 um \u00fanico ano melhor" in answer
+    assert "**2025:**" in answer
+    assert "**2024:**" in answer
+    assert "2023" not in answer
+    assert "Matem\u00e1tica (467,27 pontos)" in answer
+    assert "Reda\u00e7\u00e3o (651,4 pontos)" in answer
+
+
+async def test_best_enem_year_answers_without_llm_or_unavailable_year(
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(agent_graph, "retrieve_project_knowledge", lambda *args: [])
+    monkeypatch.setattr(
+        agent_graph,
+        "create_mcp_client",
+        lambda: Client(mcp, read_timeout_seconds=5),
+    )
+
+    result = await agent_graph.run_agent(
+        "Em qual ano essa escola foi melhor no ENEM?",
+        school_code="21288780",
+        selection={"analysisLevel": "school", "year": 2025},
+    )
+
+    assert result["engine"] == "mcp-direct"
+    assert result["source"] == "ENEM e Censo Escolar 2024\u20132025"
+    assert "2024" in result["answer"]
+    assert "2025" in result["answer"]
+    assert "2023" not in result["answer"]
+
+
+async def test_unavailable_enem_year_is_grounded_in_methodology(monkeypatch) -> None:
+    monkeypatch.setattr(agent_graph, "retrieve_project_knowledge", lambda *args: [])
+    monkeypatch.setattr(
+        agent_graph,
+        "create_mcp_client",
+        lambda: Client(mcp, read_timeout_seconds=5),
+    )
+
+    result = await agent_graph.run_agent(
+        "Como foi o desempenho na escola no ano de 2023?",
+        school_code="21288780",
+        selection={"analysisLevel": "school", "year": 2025},
+    )
+
+    assert result["engine"] == "mcp-direct"
+    assert result["evidence_count"] == 2
+    assert result["answer"] == (
+        "N\u00e3o h\u00e1 dados de Censo Escolar e ENEM para 2023. "
+        "Os anos dispon\u00edveis s\u00e3o 2024 e 2025."
+    )
 
 
 def test_selected_year_replaces_planner_invented_year() -> None:
